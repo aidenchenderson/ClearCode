@@ -19,6 +19,25 @@ def _uid_from_request():
     return claims.get("uid"), None
 
 
+@bp.route("/by-github-id", methods=["GET"])
+def get_assignments_by_github_id():
+    """Get assignments by GitHub ID (for VS Code extension - mock data)."""
+    github_id = request.args.get("identity")
+    if not github_id:
+        return jsonify({"error": "Missing identity parameter"}), 400
+    
+    # Mock data for testing
+    mock_assignments = [
+        {"id": "112", "name": "Assignment 1", "dueDate": "2026-02-15"},
+        {"id": "222", "name": "Assignment 2", "dueDate": "2026-02-22"},
+        {"id": "332", "name": "Assignment 3", "dueDate": "2026-03-01"},
+        {"id": "442", "name": "Assignment 4", "dueDate": "2026-03-08"},
+    ]
+    
+    current_app.logger.info("[assignments] GET by-github-id for %s", github_id)
+    return jsonify(mock_assignments), 200
+
+
 @bp.route("", methods=["GET"])
 def list_assignments():
     """List assignments for the authenticated user."""

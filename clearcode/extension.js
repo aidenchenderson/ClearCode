@@ -1,11 +1,7 @@
 // extension.js
-const vscode = require('vscode');
-const { execSync } = require('child_process');
-const path = require('path');
-
-
-
-
+const vscode = require("vscode");
+const { execSync } = require("child_process");
+const path = require("path");
 
 const dirtyByFile = new Map(); // filePath -> Set(lineNumbers 0-based)
 let cachedIdentity = null;
@@ -26,17 +22,21 @@ class LiveChangeTrackerViewProvider {
 
   getChildren() {
     return [
-      new vscode.TreeItem(`Output: ${this.outputChannelName}`, vscode.TreeItemCollapsibleState.None),
-      new vscode.TreeItem('Tip: Open View → Output → Live Change Tracker', vscode.TreeItemCollapsibleState.None)
+      new vscode.TreeItem(
+        `Output: ${this.outputChannelName}`,
+        vscode.TreeItemCollapsibleState.None,
+      ),
+      new vscode.TreeItem(
+        "Tip: Open View → Output → Live Change Tracker",
+        vscode.TreeItemCollapsibleState.None,
+      ),
     ];
   }
 }
 
-
-
 function tryExec(cmd, cwd) {
   try {
-    return execSync(cmd, { cwd, stdio: ['ignore', 'pipe', 'ignore'] })
+    return execSync(cmd, { cwd, stdio: ["ignore", "pipe", "ignore"] })
       .toString()
       .trim();
   } catch {
@@ -53,7 +53,7 @@ function tryExec(cmd, cwd) {
 function getAutoIdentity(workspaceFolder) {
   if (cachedIdentity) return cachedIdentity;
 
-  const remote = tryExec('git remote get-url origin', workspaceFolder);
+  const remote = tryExec("git remote get-url origin", workspaceFolder);
   if (remote) {
     const m = remote.match(/^git@github\.com:([^/]+)\/.+$/);
     if (m && m[1]) {
@@ -62,25 +62,23 @@ function getAutoIdentity(workspaceFolder) {
     }
   }
 
-  const ghUser = tryExec('gh api user -q .login', workspaceFolder);
+  const ghUser = tryExec("gh api user -q .login", workspaceFolder);
   if (ghUser) {
     cachedIdentity = ghUser;
     return cachedIdentity;
   }
 
-  const name = tryExec('git config user.name', workspaceFolder);
-  const email = tryExec('git config user.email', workspaceFolder);
+  const name = tryExec("git config user.name", workspaceFolder);
+  const email = tryExec("git config user.email", workspaceFolder);
 
-  cachedIdentity = name || email || 'unknown-user';
+  cachedIdentity = name || email || "unknown-user";
   return cachedIdentity;
 }
-
-
 
 // ---------------- REPO DETECTION ----------------
 
 function getGitRootForFile(filePath) {
-  return tryExec('git rev-parse --show-toplevel', path.dirname(filePath));
+  return tryExec("git rev-parse --show-toplevel", path.dirname(filePath));
 }
 
 function normalizeGithubRemote(remoteUrl) {
@@ -99,14 +97,14 @@ function normalizeGithubRemote(remoteUrl) {
 
 function getRepoLinkForFile(filePath) {
   const gitRoot = getGitRootForFile(filePath);
-  if (!gitRoot) return 'none';
+  if (!gitRoot) return "none";
 
   if (repoCache.has(gitRoot)) {
     return repoCache.get(gitRoot);
   }
 
-  const remote = tryExec('git remote get-url origin', gitRoot);
-  const repoLink = normalizeGithubRemote(remote) || 'none';
+  const remote = tryExec("git remote get-url origin", gitRoot);
+  const repoLink = normalizeGithubRemote(remote) || "none";
 
   repoCache.set(gitRoot, repoLink);
   return repoLink;
@@ -120,7 +118,10 @@ function markDirty(filePath, line0) {
 }
 
 function getOpenDocByPath(filePath) {
-  return vscode.workspace.textDocuments.find(d => d.uri.fsPath === filePath) || null;
+  return (
+    vscode.workspace.textDocuments.find((d) => d.uri.fsPath === filePath) ||
+    null
+  );
 }
 
 // ---------------- EXTENSION LIFECYCLE ----------------
@@ -143,27 +144,27 @@ class AssignmentsProvider {
   }
 
   getChildren() {
+    const assignments = this.assignments;
+    const assignmentIDs = ["112", "222", "332", "442"];
+    //print out "username" has these assignments "assignment names"
+    this.output.appendLine(
+      `User ${this.identity} has assignments: ${assignments.join(", ")}`,
+    );
 
-	const assignments = this.assignments;
-	const assignmentIDs = ['112', '222', '332', '442'];
-	//print out "username" has these assignments "assignment names"
-	this.output.appendLine(`User ${this.identity} has assignments: ${assignments.join(', ')}`);
-	
-
-    return assignments.map(name => {
+    return assignments.map((name) => {
       const key = `assignmentFile:${name}`;
-      const currentFile = this.context.globalState.get(key, 'not set');
+      const currentFile = this.context.globalState.get(key, "not set");
 
       const item = new vscode.TreeItem(
         `${name}  —  ${currentFile}`,
-        vscode.TreeItemCollapsibleState.None
+        vscode.TreeItemCollapsibleState.None,
       );
 
-      item.contextValue = 'assignmentItem';
+      item.contextValue = "assignmentItem";
       item.command = {
-        command: 'live.setAssignmentFile',
-        title: 'Set Assignment File',
-        arguments: [name]
+        command: "live.setAssignmentFile",
+        title: "Set Assignment File",
+        arguments: [name],
       };
 
       return item;
@@ -171,78 +172,96 @@ class AssignmentsProvider {
   }
 }
 
-
-
 async function activate(context) {
-	
-  const output = vscode.window.createOutputChannel('Live Change Tracker');
+  const output = vscode.window.createOutputChannel("Live Change Tracker");
 
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+  const workspaceFolder =
+    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
   const identity = getAutoIdentity(workspaceFolder);
   //show the identity in the output for debugging
-  output.appendLine(`Live Change Tracker initialized with identity: ${identity}`);
-
+  output.appendLine(
+    `Live Change Tracker initialized with identity: ${identity}`,
+  );
 
   //flask call here to get the assignments for the user (send user identity, get back list of assignments)
 
-	const res = await fetch(
-	`http://localhost:5000/extension/extensionAssignment?identity=${encodeURIComponent(identity)}`
-	);
-	const data = await res.json();
-  output.appendLine(`data from flask: ${JSON.stringify(data)}`);
+  let assignments = [];
+  try {
+    const res = await fetch(
+      `http://localhost:5000/api/v1/assignments/by-github-id?identity=${encodeURIComponent(identity)}`,
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    output.appendLine(`data from flask: ${JSON.stringify(data)}`);
+    assignments = data.map((a) => a.name || a.id);
+  } catch (err) {
+    output.appendLine(`Failed to fetch assignments: ${err.message}`);
+    assignments = [];
+  }
 
-	// data.assignments is your list
+  // data.assignments is your list
 
-
-
-	const ASSIGNMENTS = [
-	'Assignment 1$23',
-	'Assignment 2$2',
-	'Assignment 3$3',
-	'Assignment 4$4'
-	];
+  const ASSIGNMENTS =
+    assignments.length > 0
+      ? assignments
+      : [
+          "Assignment 1$23",
+          "Assignment 2$2",
+          "Assignment 3$3",
+          "Assignment 4$4",
+        ];
 
   // --- Assignments sidebar ---
-  const assignmentsProvider = new AssignmentsProvider(context, identity, output, ASSIGNMENTS);
-  vscode.window.registerTreeDataProvider('assignmentsView', assignmentsProvider);
-
+  const assignmentsProvider = new AssignmentsProvider(
+    context,
+    identity,
+    output,
+    ASSIGNMENTS,
+  );
+  vscode.window.registerTreeDataProvider(
+    "assignmentsView",
+    assignmentsProvider,
+  );
 
   // Click Assignment 1/2/etc -> prompt for file path
   context.subscriptions.push(
-    vscode.commands.registerCommand('live.setAssignmentFile', async (assignmentName) => {
-      const key = `assignmentFile:${assignmentName}`;
-      const current = context.globalState.get(key, '');
+    vscode.commands.registerCommand(
+      "live.setAssignmentFile",
+      async (assignmentName) => {
+        const key = `assignmentFile:${assignmentName}`;
+        const current = context.globalState.get(key, "");
 
-      const file = await vscode.window.showInputBox({
-        title: `${assignmentName} file`,
-        prompt: 'Enter the filename or relative path in your repo (e.g., A1.py or src/A1.py)',
-        value: current || '',
-        ignoreFocusOut: true
-      });
+        const file = await vscode.window.showInputBox({
+          title: `${assignmentName} file`,
+          prompt:
+            "Enter the filename or relative path in your repo (e.g., A1.py or src/A1.py)",
+          value: current || "",
+          ignoreFocusOut: true,
+        });
 
-      if (file === undefined) return; // user cancelled
+        if (file === undefined) return; // user cancelled
 
-      await context.globalState.update(key, file.trim() || 'not set');
-      assignmentsProvider.refresh();
-      vscode.window.showInformationMessage(`${assignmentName} file set to: ${file.trim() || 'not set'}`);
-    })
+        await context.globalState.update(key, file.trim() || "not set");
+        assignmentsProvider.refresh();
+        vscode.window.showInformationMessage(
+          `${assignmentName} file set to: ${file.trim() || "not set"}`,
+        );
+      },
+    ),
   );
 
-
-
-
-  const changeListener = vscode.workspace.onDidChangeTextDocument(event => {
+  const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
     const doc = event.document;
     const filePath = doc.uri.fsPath;
 
     for (const change of event.contentChanges) {
       const start = change.range.start.line;
       const end = change.range.end.line;
-      const insertedLines = change.text.split('\n').length - 1;
+      const insertedLines = change.text.split("\n").length - 1;
 
       const last = Math.min(
         doc.lineCount - 1,
-        Math.max(end + insertedLines, start)
+        Math.max(end + insertedLines, start),
       );
 
       for (let line = start; line <= last; line++) {
@@ -254,7 +273,9 @@ async function activate(context) {
   const interval = setInterval(() => {
     if (dirtyByFile.size === 0) return;
 
-    output.appendLine(`\n=== ${identity} @ ${new Date().toLocaleTimeString()} ===`);
+    output.appendLine(
+      `\n=== ${identity} @ ${new Date().toLocaleTimeString()} ===`,
+    );
 
     for (const [filePath, linesSet] of dirtyByFile.entries()) {
       const doc = getOpenDocByPath(filePath);
@@ -262,7 +283,7 @@ async function activate(context) {
 
       if (!doc) {
         output.appendLine(
-          `${identity} | ${repoLink} | ${path.basename(filePath)} (not open)`
+          `${identity} | ${repoLink} | ${path.basename(filePath)} (not open)`,
         );
         continue;
       }
@@ -273,17 +294,14 @@ async function activate(context) {
         if (line0 < 0 || line0 >= doc.lineCount) continue;
         const text = doc.lineAt(line0).text;
 
-
-
-		for (const name of ASSIGNMENTS) {
-		const key = `assignmentFile:${name}`;
-		const selected = context.globalState.get(key, 'not set');
-		output.appendLine(`  ${name} -> ${selected}`);
-		}
-
+        for (const name of ASSIGNMENTS) {
+          const key = `assignmentFile:${name}`;
+          const selected = context.globalState.get(key, "not set");
+          output.appendLine(`  ${name} -> ${selected}`);
+        }
 
         output.appendLine(
-          `${identity} | ${repoLink} | ${path.basename(filePath)} : Line ${line0 + 1} → ${text}`
+          `${identity} | ${repoLink} | ${path.basename(filePath)} : Line ${line0 + 1} → ${text}`,
         );
       }
     }
