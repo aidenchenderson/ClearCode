@@ -186,7 +186,7 @@ async function activate(context) {
   //flask call here to get the assignments for the user (send user identity, get back list of assignments)
 
 	const res = await fetch(
-	`http://localhost:5000/assignments?identity=${encodeURIComponent(identity)}`
+	`http://localhost:5000/extension/extensionAssignment?identity=${encodeURIComponent(identity)}`
 	);
 	const data = await res.json();
   output.appendLine(`data from flask: ${JSON.stringify(data)}`);
