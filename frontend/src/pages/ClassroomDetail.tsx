@@ -2,8 +2,22 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import TopBar from "@/components/TopBar";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,7 +31,11 @@ import type { Student } from "@/data/mockData";
 const ClassroomDetail = () => {
   const { classroomId } = useParams();
   const { getAccessToken } = useAuth();
-  const [classroom, setClassroom] = useState<{ id: string; name: string; description: string; students: Student[] } | null | undefined>(undefined);
+  const [classroom, setClassroom] = useState<
+    | { id: string; name: string; description: string; students: Student[] }
+    | null
+    | undefined
+  >(undefined);
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -25,11 +43,21 @@ const ClassroomDetail = () => {
   useEffect(() => {
     if (!classroomId) return;
     setClassroom(undefined);
-    getAccessToken().then((token) => fetchClassroom(token, classroomId).then((c) => setClassroom(c ?? null)));
-  }, [classroomId, getAccessToken]);
+    getAccessToken().then((token) =>
+      fetchClassroom(token, classroomId).then((c) => setClassroom(c ?? null)),
+    );
+  }, [classroomId]);
 
-  if (!classroomId) return <div className="p-8 text-center text-muted-foreground">Classroom not found.</div>;
-  if (classroom === null) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
+  if (!classroomId)
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        Classroom not found.
+      </div>
+    );
+  if (classroom === null)
+    return (
+      <div className="p-8 text-center text-muted-foreground">Loading…</div>
+    );
   const base = classroom;
   const students = base.students;
 
@@ -37,7 +65,11 @@ const ClassroomDetail = () => {
     async (user: GitHubUser) => {
       const normalized = user.login.toLowerCase();
       if (students.some((s) => s.githubUsername.toLowerCase() === normalized)) {
-        toast({ title: "Already added", description: `@${normalized} is already in this classroom.`, variant: "destructive" });
+        toast({
+          title: "Already added",
+          description: `@${normalized} is already in this classroom.`,
+          variant: "destructive",
+        });
         return;
       }
       setAdding(true);
@@ -49,10 +81,15 @@ const ClassroomDetail = () => {
           name: full.name,
         };
         const token = await getAccessToken();
-        const updated = await updateClassroom(token, classroomId, { students: [...students, newStudent] });
+        const updated = await updateClassroom(token, classroomId, {
+          students: [...students, newStudent],
+        });
         setClassroom(updated);
         setQuery("");
-        toast({ title: "Student added", description: `@${full.login} (${full.name}) added.` });
+        toast({
+          title: "Student added",
+          description: `@${full.login} (${full.name}) added.`,
+        });
       } catch (e) {
         const newStudent: Student = {
           githubUsername: user.login,
@@ -60,7 +97,9 @@ const ClassroomDetail = () => {
           name: user.name,
         };
         const token = await getAccessToken();
-        const updated = await updateClassroom(token, classroomId, { students: [...students, newStudent] });
+        const updated = await updateClassroom(token, classroomId, {
+          students: [...students, newStudent],
+        });
         setClassroom(updated);
         setQuery("");
         toast({ title: "Student added", description: `@${user.login} added.` });
@@ -68,7 +107,7 @@ const ClassroomDetail = () => {
         setAdding(false);
       }
     },
-    [classroomId, students, getAccessToken]
+    [classroomId, students],
   );
 
   const handleOpenChange = useCallback((open: boolean) => {
@@ -84,15 +123,21 @@ const ClassroomDetail = () => {
         <p className="mt-1 text-muted-foreground">{base.description}</p>
 
         <div className="mt-8 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Students ({students.length})</h2>
+          <h2 className="text-lg font-semibold">
+            Students ({students.length})
+          </h2>
           <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
-              <Button size="sm" className="gap-1"><Plus className="h-4 w-4" /> Add Student</Button>
+              <Button size="sm" className="gap-1">
+                <Plus className="h-4 w-4" /> Add Student
+              </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Add Student</DialogTitle>
-                <DialogDescription>Search by GitHub username — results appear when you type.</DialogDescription>
+                <DialogDescription>
+                  Search by GitHub username — results appear when you type.
+                </DialogDescription>
               </DialogHeader>
               <GitHubUserSearch
                 value={query}
@@ -117,9 +162,16 @@ const ClassroomDetail = () => {
             <TableBody>
               {students.map((s, i) => (
                 <TableRow key={s.githubUsername}>
-                  <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {i + 1}
+                  </TableCell>
                   <TableCell>
-                    <UserAvatarName githubUsername={s.githubUsername} avatarUrl={s.avatarUrl} name={s.name} size="sm" />
+                    <UserAvatarName
+                      githubUsername={s.githubUsername}
+                      avatarUrl={s.avatarUrl}
+                      name={s.name}
+                      size="sm"
+                    />
                   </TableCell>
                 </TableRow>
               ))}

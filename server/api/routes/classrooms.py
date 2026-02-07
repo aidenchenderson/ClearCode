@@ -147,3 +147,27 @@ def update_classroom(classroom_id):
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/<classroom_id>", methods=["DELETE"])
+def delete_classroom(classroom_id):
+    """Delete a classroom (must belong to user)."""
+    uid, err = _uid_from_request()
+    if err is not None:
+        return err[0], err[1]
+    db = get_firestore()
+    if not db:
+        return jsonify({"error": "Database not configured"}), 503
+    try:
+        doc_ref = db.collection(COLLECTION).document(classroom_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            return jsonify({"error": "Not found"}), 404
+        if doc.to_dict().get("userId") != uid:
+            return jsonify({"error": "Forbidden"}), 403
+        
+        doc_ref.delete()
+        current_app.logger.info("[classrooms] Deleted classroom %s", classroom_id)
+        return jsonify({"id": classroom_id}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

@@ -1,19 +1,38 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { Calendar, Users, UserPlus, Send } from "lucide-react";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { Calendar, Users, UserPlus, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import TopBar from "@/components/TopBar";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { getGitHubUser } from "@/lib/api";
-import { fetchAssignment } from "@/lib/firestore";
+import {
+  fetchAssignment,
+  fetchInvitedStudents,
+  inviteStudent,
+  deleteInvite,
+  deleteAssignment,
+} from "@/lib/firestore";
 import { GitHubUserSearch } from "@/components/GitHubUserSearch";
 import { UserAvatarName } from "@/components/UserAvatarName";
-import { mockInvitedByAssignmentId } from "@/data/mockData";
-import type { Assignment } from "@/data/mockData";
+import type { Assignment, InvitedUser } from "@/data/mockData";
 import type { GitHubUser } from "@/lib/api";
 
 const statusColor: Record<string, "default" | "secondary" | "destructive"> = {
@@ -24,7 +43,11 @@ const statusColor: Record<string, "default" | "secondary" | "destructive"> = {
 
 const AssignmentDetail = () => {
   const { assignmentId } = useParams();
-  const [assignment, setAssignment] = useState<Assignment | null | undefined>(undefined);
+  const navigate = useNavigate();
+  const [assignment, setAssignment] = useState<Assignment | null | undefined>(
+    undefined,
+  );
+  const [invitedUsers, setInvitedUsers] = useState<InvitedUser[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteQuery, setInviteQuery] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
@@ -33,26 +56,111 @@ const AssignmentDetail = () => {
   useEffect(() => {
     if (!assignmentId) return;
     setAssignment(undefined);
-    getAccessToken().then((token) => fetchAssignment(token, assignmentId).then((a) => setAssignment(a ?? null)));
-  }, [assignmentId, getAccessToken]);
+    getAccessToken().then((token) =>
+      fetchAssignment(token, assignmentId).then((a) =>
+        setAssignment(a ?? null),
+      ),
+    );
+  }, [assignmentId]);
 
-  if (!assignmentId) return <div className="p-8 text-center text-muted-foreground">Assignment not found.</div>;
-  if (assignment === undefined) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
-  if (assignment === null) return <div className="p-8 text-center text-muted-foreground">Assignment not found.</div>;
+  useEffect(() => {
+    if (!assignmentId) return;
+    getAccessToken().then((token) => {
+      if (token) {
+        fetchInvitedStudents(token, assignmentId).then((users) =>
+          setInvitedUsers(users),
+        );
+      }
+    });
+  }, [assignmentId]);
 
-  const invitedUsers = mockInvitedByAssignmentId[assignmentId] ?? [];
+  const handleDeleteInvite = async (inviteId: string) => {
+    try {
+      const token = await getAccessToken();
+      if (!token || !assignmentId) throw new Error("Not authenticated");
+
+      await deleteInvite(token, assignmentId, inviteId);
+
+      // Refetch invited students
+      const updated = await fetchInvitedStudents(token, assignmentId);
+      setInvitedUsers(updated);
+
+      toast({
+        title: "Invite removed",
+        description: "The student invitation has been removed.",
+      });
+    } catch (err) {
+      const errorMsg =
+        err instanceof Error ? err.message : "Failed to remove invite";
+      toast({ title: "Error", description: errorMsg, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteAssignment = async () => {
+    try {
+      const token = await getAccessToken();
+      if (!token || !assignmentId) throw new Error("Not authenticated");
+
+      await deleteAssignment(token, assignmentId);
+
+      toast({
+        title: "Assignment deleted",
+        description: "The assignment has been deleted.",
+      });
+      navigate("/dashboard");
+    } catch (err) {
+      const errorMsg =
+        err instanceof Error ? err.message : "Failed to delete assignment";
+      toast({ title: "Error", description: errorMsg, variant: "destructive" });
+    }
+  };
+
+  if (!assignmentId)
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        Assignment not found.
+      </div>
+    );
+  if (assignment === undefined)
+    return (
+      <div className="p-8 text-center text-muted-foreground">Loading…</div>
+    );
+  if (assignment === null)
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        Assignment not found.
+      </div>
+    );
 
   const inviteUserFromSearch = async (user: GitHubUser) => {
     setInviteLoading(true);
     try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Not authenticated");
+
       const full = await getGitHubUser(user.login);
+      await inviteStudent(token, assignmentId, {
+        githubUsername: full.login,
+        avatarUrl: full.avatar_url,
+        name: full.name,
+      });
+
+      // Refetch invited students
+      const updated = await fetchInvitedStudents(token, assignmentId);
+      setInvitedUsers(updated);
+
       setInviteOpen(false);
       setInviteQuery("");
-      toast({ title: "Invitation sent", description: `Invited @${full.login} (${full.name}) via GitHub.` });
-    } catch {
+      toast({
+        title: "Invitation sent",
+        description: `Invited @${full.login} (${full.name}) via GitHub.`,
+      });
+    } catch (err) {
+      const errorMsg =
+        err instanceof Error ? err.message : "Failed to invite user";
       setInviteOpen(false);
       setInviteQuery("");
-      toast({ title: "Invitation sent", description: `Invited @${user.login} via GitHub.` });
+      toast({ title: "Error", description: errorMsg, variant: "destructive" });
     } finally {
       setInviteLoading(false);
     }
@@ -63,7 +171,8 @@ const AssignmentDetail = () => {
     setInviteOpen(open);
   };
 
-  const inviteClassroom = () => toast({ title: "Invitation sent", description: "Invited classroom." });
+  const inviteClassroom = () =>
+    toast({ title: "Invitation sent", description: "Invited classroom." });
 
   return (
     <div className="min-h-screen">
@@ -72,16 +181,34 @@ const AssignmentDetail = () => {
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">{assignment.name}</h1>
-            <p className="mt-1 text-muted-foreground">{assignment.description}</p>
+            <h1 className="text-2xl font-bold text-foreground">
+              {assignment.name}
+            </h1>
+            <p className="mt-1 text-muted-foreground">
+              {assignment.description}
+            </p>
           </div>
-          <Badge variant={assignment.isGroup ? "default" : "secondary"}>
-            {assignment.isGroup ? `Group (max ${assignment.maxGroupSize})` : "Solo"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant={assignment.isGroup ? "default" : "secondary"}>
+              {assignment.isGroup
+                ? `Group (max ${assignment.maxGroupSize})`
+                : "Solo"}
+            </Badge>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-1"
+              onClick={handleDeleteAssignment}
+            >
+              <Trash2 className="h-4 w-4" /> Delete
+            </Button>
+          </div>
         </div>
 
         <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> Due {assignment.dueDate}</span>
+          <span className="flex items-center gap-1">
+            <Calendar className="h-4 w-4" /> Due {assignment.dueDate}
+          </span>
           <span>Created {assignment.createdAt}</span>
         </div>
 
@@ -96,7 +223,9 @@ const AssignmentDetail = () => {
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Invite by GitHub username</DialogTitle>
-                <DialogDescription>Search by GitHub username — results appear when you type.</DialogDescription>
+                <DialogDescription>
+                  Search by GitHub username — results appear when you type.
+                </DialogDescription>
               </DialogHeader>
               <GitHubUserSearch
                 value={inviteQuery}
@@ -108,7 +237,12 @@ const AssignmentDetail = () => {
               />
             </DialogContent>
           </Dialog>
-          <Button variant="outline" size="sm" className="gap-1" onClick={() => inviteClassroom()}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={() => inviteClassroom()}
+          >
             <Send className="h-4 w-4" /> Invite Classroom
           </Button>
         </div>
@@ -116,19 +250,37 @@ const AssignmentDetail = () => {
         {/* Invited users (mock; will be Firebase) */}
         {invitedUsers.length > 0 && (
           <>
-            <h2 className="mt-8 text-lg font-semibold text-foreground">Invited</h2>
+            <h2 className="mt-8 text-lg font-semibold text-foreground">
+              Invited
+            </h2>
             <div className="mt-3 rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>GitHub User</TableHead>
+                    <TableHead className="w-20">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {invitedUsers.map((inv) => (
                     <TableRow key={inv.id ?? inv.githubUsername}>
                       <TableCell>
-                        <UserAvatarName githubUsername={inv.githubUsername} avatarUrl={inv.avatarUrl} name={inv.name} size="sm" />
+                        <UserAvatarName
+                          githubUsername={inv.githubUsername}
+                          avatarUrl={inv.avatarUrl}
+                          name={inv.name}
+                          size="sm"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => inv.id && handleDeleteInvite(inv.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -139,30 +291,42 @@ const AssignmentDetail = () => {
         )}
 
         {/* Groups Table */}
-        <h2 className="mt-8 text-lg font-semibold text-foreground">{assignment.isGroup ? "Groups" : "Students"}</h2>
+        <h2 className="mt-8 text-lg font-semibold text-foreground">
+          {assignment.isGroup ? "Groups" : "Students"}
+        </h2>
         <div className="mt-3 rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{assignment.isGroup ? "Group" : "Student"}</TableHead>
+                <TableHead>
+                  {assignment.isGroup ? "Group" : "Student"}
+                </TableHead>
                 <TableHead>Members</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {assignment.groups.map(g => (
+              {assignment.groups.map((g) => (
                 <TableRow key={g.id} className="cursor-pointer">
                   <TableCell>
-                    <Link to={`/dashboard/assignments/${assignment.id}/groups/${g.id}`} className="font-medium text-primary hover:underline">
+                    <Link
+                      to={`/dashboard/assignments/${assignment.id}/groups/${g.id}`}
+                      className="font-medium text-primary hover:underline"
+                    >
                       {g.name}
                     </Link>
                   </TableCell>
                   <TableCell className="flex items-center gap-1 text-sm">
                     <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                    {g.members.map(m => `@${m}`).join(", ")}
+                    {g.members.map((m) => `@${m}`).join(", ")}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusColor[g.status] ?? "secondary"} className="capitalize">{g.status}</Badge>
+                    <Badge
+                      variant={statusColor[g.status] ?? "secondary"}
+                      className="capitalize"
+                    >
+                      {g.status}
+                    </Badge>
                   </TableCell>
                 </TableRow>
               ))}

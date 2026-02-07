@@ -11,19 +11,41 @@ import type { Assignment } from "@/data/mockData";
 const GroupDetail = () => {
   const { assignmentId, groupId } = useParams();
   const { getAccessToken } = useAuth();
-  const [assignment, setAssignment] = useState<Assignment | null | undefined>(undefined);
+  const [assignment, setAssignment] = useState<Assignment | null | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     if (!assignmentId) return;
     setAssignment(undefined);
-    getAccessToken().then((token) => fetchAssignment(token, assignmentId).then((a) => setAssignment(a ?? null)));
-  }, [assignmentId, getAccessToken]);
+    getAccessToken().then((token) =>
+      fetchAssignment(token, assignmentId).then((a) =>
+        setAssignment(a ?? null),
+      ),
+    );
+  }, [assignmentId]);
 
-  const group = assignment && typeof assignment === "object" ? assignment.groups.find((g) => g.id === groupId) : undefined;
+  const group =
+    assignment && typeof assignment === "object"
+      ? assignment.groups.find((g) => g.id === groupId)
+      : undefined;
 
-  if (!assignmentId || !groupId) return <div className="p-8 text-center text-muted-foreground">Group not found.</div>;
-  if (assignment === undefined) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
-  if (assignment === null || !group) return <div className="p-8 text-center text-muted-foreground">Group not found.</div>;
+  if (!assignmentId || !groupId)
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        Group not found.
+      </div>
+    );
+  if (assignment === undefined)
+    return (
+      <div className="p-8 text-center text-muted-foreground">Loading…</div>
+    );
+  if (assignment === null || !group)
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        Group not found.
+      </div>
+    );
 
   return (
     <div className="min-h-screen">
@@ -34,13 +56,17 @@ const GroupDetail = () => {
           Assignment: {assignment.name}
         </p>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {group.members.map(m => (
-            <Badge key={m} variant="secondary" className="gap-1"><Github className="h-3 w-3" />@{m}</Badge>
+          {group.members.map((m) => (
+            <Badge key={m} variant="secondary" className="gap-1">
+              <Github className="h-3 w-3" />@{m}
+            </Badge>
           ))}
         </div>
 
         {/* Activity Timeline */}
-        <h2 className="mt-10 text-lg font-semibold text-foreground">Activity Timeline</h2>
+        <h2 className="mt-10 text-lg font-semibold text-foreground">
+          Activity Timeline
+        </h2>
         <div className="relative mt-4 ml-4 border-l-2 border-border pl-6 space-y-6">
           {group.activityLog.map((entry, i) => (
             <div key={i} className="relative">
@@ -55,7 +81,9 @@ const GroupDetail = () => {
             </div>
           ))}
           {group.activityLog.length === 0 && (
-            <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
+            <p className="text-sm text-muted-foreground">
+              No activity recorded yet.
+            </p>
           )}
         </div>
       </main>
