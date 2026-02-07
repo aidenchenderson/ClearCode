@@ -1,30 +1,19 @@
-"""Assignments CRUD via Flask; data stored in Firestore."""
 from flask import Blueprint, current_app, jsonify, request
 
-from server.fb_admin import get_firestore, verify_id_token
+extension_bp = Blueprint("extension", __name__, url_prefix="")
 
-bp = Blueprint("extension", __name__, url_prefix="")
-COLLECTION = "extension"
-
-
-@bp.route("/extensionAssignment", methods=["GET"])
-def assignmentsList():
-    identity = request.args.get("identity")
+@extension_bp.get("")
+def assignments_list():
+    identity = (request.args.get("identity") or "").strip().lower()
+    current_app.logger.info("[extension] identity=%r", identity)
 
     if not identity:
-        return jsonify({"assignments": []})
+        return jsonify({"identity": "", "assignments": []}), 200
 
-    identity = identity.lower()
-
-    # TODO: replace this with DB / real logic
     assignments_by_user = {
         "iainmac32": ["Assignment 1!", "Assignment 2!!"],
-        "test": ["test1assignment"]
+        "test": ["test1assignment"],
     }
 
     assignments = assignments_by_user.get(identity, ["test1assignment"])
-
-    return jsonify({
-        "identity": identity,
-        "assignments": assignments
-    })
+    return jsonify({"identity": identity, "assignments": assignments}), 200

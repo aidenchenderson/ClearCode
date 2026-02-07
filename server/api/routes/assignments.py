@@ -21,21 +21,19 @@ def _uid_from_request():
 
 @bp.route("/by-github-id", methods=["GET"])
 def get_assignments_by_github_id():
-    """Get assignments by GitHub ID (for VS Code extension - mock data)."""
-    github_id = request.args.get("identity")
-    if not github_id:
-        return jsonify({"error": "Missing identity parameter"}), 400
-    
-    # Mock data for testing
-    mock_assignments = [
-        {"id": "112", "name": "Assignment 1", "dueDate": "2026-02-15"},
-        {"id": "222", "name": "Assignment 2", "dueDate": "2026-02-22"},
-        {"id": "332", "name": "Assignment 3", "dueDate": "2026-03-01"},
-        {"id": "442", "name": "Assignment 4", "dueDate": "2026-03-08"},
-    ]
-    
-    current_app.logger.info("[assignments] GET by-github-id for %s", github_id)
-    return jsonify(mock_assignments), 200
+    identity = (request.args.get("identity") or "").strip().lower()
+    current_app.logger.info("[extension] identity=%r", identity)
+
+
+    #call the firebase api to get the assignments for the user with the given github id
+
+    if not identity:
+        return jsonify({"identity": "", "assignments": []}), 200
+
+    assignments_by_user = {"iainmac32": {"Assignment 1!": "123", "Assignment 2!!": "123"}}
+
+    assignments = assignments_by_user.get(identity, ["test1assignment"])
+    return jsonify({"identity": identity, "assignments": assignments}), 200
 
 
 @bp.route("", methods=["GET"])
