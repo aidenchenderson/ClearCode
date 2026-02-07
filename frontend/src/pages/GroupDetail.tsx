@@ -17,7 +17,7 @@ const GroupDetail = () => {
     if (!assignmentId) return;
     setAssignment(undefined);
     getAccessToken().then((token) => fetchAssignment(token, assignmentId).then((a) => setAssignment(a ?? null)));
-  }, [assignmentId, getAccessToken]);
+  }, [assignmentId]);
 
   const group = assignment && typeof assignment === "object" ? assignment.groups.find((g) => g.id === groupId) : undefined;
 

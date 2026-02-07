@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Calendar, Users } from "lucide-react";
+import { Plus, Calendar, Users, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import TopBar from "@/components/TopBar";
 import CreateAssignmentDialog from "@/components/CreateAssignmentDialog";
 import CreateClassroomDialog from "@/components/CreateClassroomDialog";
 import { useAuth } from "@/hooks/useAuth";
-import { fetchClassrooms, fetchAssignments } from "@/lib/firestore";
+import { fetchClassrooms, fetchAssignments, deleteClassroom, deleteAssignment } from "@/lib/firestore";
 import { toast } from "sonner";
 import type { Assignment, Classroom } from "@/data/mockData";
 
@@ -16,6 +16,7 @@ const Dashboard = () => {
   const { user, getAccessToken } = useAuth();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const refetch = async () => {
     const token = await getAccessToken(true);
@@ -32,6 +33,44 @@ const Dashboard = () => {
       setClassrooms([]);
       setAssignments([]);
       toast.error(err instanceof Error ? err.message : "Failed to load dashboard data");
+    }
+  };
+
+  const handleDeleteAssignment = async (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!confirm("Are you sure you want to delete this assignment?")) return;
+    
+    try {
+      setDeletingId(id);
+      const token = await getAccessToken();
+      if (!token) throw new Error("Not authenticated");
+      
+      await deleteAssignment(token, id);
+      setAssignments(assignments.filter(a => a.id !== id));
+      toast.success("Assignment deleted");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete assignment");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteClassroom = async (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!confirm("Are you sure you want to delete this classroom?")) return;
+    
+    try {
+      setDeletingId(id);
+      const token = await getAccessToken();
+      if (!token) throw new Error("Not authenticated");
+      
+      await deleteClassroom(token, id);
+      setClassrooms(classrooms.filter(c => c.id !== id));
+      toast.success("Classroom deleted");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete classroom");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -60,23 +99,34 @@ const Dashboard = () => {
             </div>
             <div className="space-y-3">
               {assignments.map((a, i) => (
-                <Link key={a.id} to={`/dashboard/assignments/${a.id}`} className="block" style={{ animation: `fadeInUp 0.6s ease-out ${0.2 + i * 0.05}s both` }}>
-                  <Card className="glass-card border-white/40 bg-white/50 backdrop-blur-xl soft-shadow card-hover transition-all duration-300">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between">
-                        <CardTitle className="text-base">{a.name}</CardTitle>
-                        <Badge variant={a.isGroup ? "default" : "secondary"} className="text-xs bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700">
-                          {a.isGroup ? "Group" : "Solo"}
-                        </Badge>
-                      </div>
-                      <CardDescription className="line-clamp-1">{a.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Due {a.dueDate}</span>
-                      <span>Created {a.createdAt}</span>
-                    </CardContent>
-                  </Card>
-                </Link>
+                <div key={a.id} style={{ animation: `fadeInUp 0.6s ease-out ${0.2 + i * 0.05}s both` }} className="group relative">
+                  <Link to={`/dashboard/assignments/${a.id}`} className="block">
+                    <Card className="glass-card border-white/40 bg-white/50 backdrop-blur-xl soft-shadow card-hover transition-all duration-300">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between">
+                          <CardTitle className="text-base">{a.name}</CardTitle>
+                          <Badge variant={a.isGroup ? "default" : "secondary"} className="text-xs bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700">
+                            {a.isGroup ? "Group" : "Solo"}
+                          </Badge>
+                        </div>
+                        <CardDescription className="line-clamp-1">{a.description}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Due {a.dueDate}</span>
+                        <span>Created {a.createdAt}</span>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => handleDeleteAssignment(a.id, e)}
+                    disabled={deletingId === a.id}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
               ))}
             </div>
           </section>
@@ -91,18 +141,29 @@ const Dashboard = () => {
             </div>
             <div className="space-y-3">
               {classrooms.map((c, i) => (
-                <Link key={c.id} to={`/dashboard/classrooms/${c.id}`} className="block" style={{ animation: `fadeInUp 0.6s ease-out ${0.25 + i * 0.05}s both` }}>
-                  <Card className="glass-card border-white/40 bg-white/50 backdrop-blur-xl soft-shadow card-hover transition-all duration-300">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">{c.name}</CardTitle>
-                      <CardDescription className="line-clamp-1">{c.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Users className="h-3.5 w-3.5" />
-                      <span>{c.students.length} students</span>
-                    </CardContent>
-                  </Card>
-                </Link>
+                <div key={c.id} style={{ animation: `fadeInUp 0.6s ease-out ${0.25 + i * 0.05}s both` }} className="group relative">
+                  <Link to={`/dashboard/classrooms/${c.id}`} className="block">
+                    <Card className="glass-card border-white/40 bg-white/50 backdrop-blur-xl soft-shadow card-hover transition-all duration-300">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">{c.name}</CardTitle>
+                        <CardDescription className="line-clamp-1">{c.description}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Users className="h-3.5 w-3.5" />
+                        <span>{c.students.length} students</span>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => handleDeleteClassroom(c.id, e)}
+                    disabled={deletingId === c.id}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
               ))}
             </div>
           </section>

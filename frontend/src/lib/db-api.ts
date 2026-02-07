@@ -5,7 +5,7 @@ const API_BASE =
   (import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ?? "http://localhost:5000";
 const API_PREFIX = "/api/v1";
 
-import type { Classroom, Assignment } from "@/data/mockData";
+import type { Classroom, Assignment, InvitedUser } from "@/data/mockData";
 
 function headers(token: string | null | undefined, method: "GET" | "POST" | "PATCH" = "GET"): HeadersInit {
   const h: HeadersInit = {};
@@ -120,4 +120,60 @@ export async function updateAssignment(
 ): Promise<void> {
   if (!token) throw new Error("Sign in required");
   await request("PATCH", `/assignments/${id}`, token, data);
+}
+
+export async function fetchInvitedStudents(
+  token: string | null | undefined,
+  assignmentId: string
+): Promise<InvitedUser[]> {
+  if (!token) return [];
+  try {
+    return await request<InvitedUser[]>("GET", `/assignments/${assignmentId}/invited`, token);
+  } catch {
+    return [];
+  }
+}
+
+export async function inviteStudent(
+  token: string | null | undefined,
+  assignmentId: string,
+  data: { githubUsername: string; avatarUrl?: string; name?: string }
+): Promise<InvitedUser> {
+  if (!token) throw new Error("Sign in required");
+  return request<InvitedUser>("POST", `/assignments/${assignmentId}/invite`, token, data);
+}
+
+export async function fetchAssignmentsForUser(
+  githubUsername: string
+): Promise<Assignment[]> {
+  try {
+    return await request<Assignment[]>("GET", `/assignments/user/${githubUsername}`, undefined);
+  } catch {
+    return [];
+  }
+}
+
+export async function deleteAssignment(
+  token: string | null | undefined,
+  assignmentId: string
+): Promise<void> {
+  if (!token) throw new Error("Sign in required");
+  await request("DELETE", `/assignments/${assignmentId}`, token);
+}
+
+export async function deleteInvite(
+  token: string | null | undefined,
+  assignmentId: string,
+  inviteId: string
+): Promise<void> {
+  if (!token) throw new Error("Sign in required");
+  await request("DELETE", `/assignments/${assignmentId}/invite/${inviteId}`, token);
+}
+
+export async function deleteClassroom(
+  token: string | null | undefined,
+  classroomId: string
+): Promise<void> {
+  if (!token) throw new Error("Sign in required");
+  await request("DELETE", `/classrooms/${classroomId}`, token);
 }

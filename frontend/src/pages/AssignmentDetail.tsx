@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { Calendar, Users, UserPlus, Send } from "lucide-react";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { Calendar, Users, UserPlus, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -9,11 +9,10 @@ import TopBar from "@/components/TopBar";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { getGitHubUser } from "@/lib/api";
-import { fetchAssignment } from "@/lib/firestore";
+import { fetchAssignment, fetchInvitedStudents, inviteStudent, deleteInvite, deleteAssignment } from "@/lib/firestore";
 import { GitHubUserSearch } from "@/components/GitHubUserSearch";
 import { UserAvatarName } from "@/components/UserAvatarName";
-import { mockInvitedByAssignmentId } from "@/data/mockData";
-import type { Assignment } from "@/data/mockData";
+import type { Assignment, InvitedUser } from "@/data/mockData";
 import type { GitHubUser } from "@/lib/api";
 
 const statusColor: Record<string, "default" | "secondary" | "destructive"> = {
@@ -24,7 +23,9 @@ const statusColor: Record<string, "default" | "secondary" | "destructive"> = {
 
 const AssignmentDetail = () => {
   const { assignmentId } = useParams();
+  const navigate = useNavigate();
   const [assignment, setAssignment] = useState<Assignment | null | undefined>(undefined);
+  const [invitedUsers, setInvitedUsers] = useState<InvitedUser[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteQuery, setInviteQuery] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
@@ -34,25 +35,79 @@ const AssignmentDetail = () => {
     if (!assignmentId) return;
     setAssignment(undefined);
     getAccessToken().then((token) => fetchAssignment(token, assignmentId).then((a) => setAssignment(a ?? null)));
-  }, [assignmentId, getAccessToken]);
+  }, [assignmentId]);
+
+  useEffect(() => {
+    if (!assignmentId) return;
+    getAccessToken().then((token) => {
+      if (token) {
+        fetchInvitedStudents(token, assignmentId).then((users) => setInvitedUsers(users));
+      }
+    });
+  }, [assignmentId]);
+
+  const handleDeleteInvite = async (inviteId: string) => {
+    try {
+      const token = await getAccessToken();
+      if (!token || !assignmentId) throw new Error("Not authenticated");
+      
+      await deleteInvite(token, assignmentId, inviteId);
+      
+      // Refetch invited students
+      const updated = await fetchInvitedStudents(token, assignmentId);
+      setInvitedUsers(updated);
+      
+      toast({ title: "Invite removed", description: "The student invitation has been removed." });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to remove invite";
+      toast({ title: "Error", description: errorMsg, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteAssignment = async () => {
+    try {
+      const token = await getAccessToken();
+      if (!token || !assignmentId) throw new Error("Not authenticated");
+      
+      await deleteAssignment(token, assignmentId);
+      
+      toast({ title: "Assignment deleted", description: "The assignment has been deleted." });
+      navigate("/dashboard");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to delete assignment";
+      toast({ title: "Error", description: errorMsg, variant: "destructive" });
+    }
+  };
 
   if (!assignmentId) return <div className="p-8 text-center text-muted-foreground">Assignment not found.</div>;
   if (assignment === undefined) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
   if (assignment === null) return <div className="p-8 text-center text-muted-foreground">Assignment not found.</div>;
 
-  const invitedUsers = mockInvitedByAssignmentId[assignmentId] ?? [];
-
   const inviteUserFromSearch = async (user: GitHubUser) => {
     setInviteLoading(true);
     try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Not authenticated");
+      
       const full = await getGitHubUser(user.login);
+      await inviteStudent(token, assignmentId, {
+        githubUsername: full.login,
+        avatarUrl: full.avatar_url,
+        name: full.name,
+      });
+      
+      // Refetch invited students
+      const updated = await fetchInvitedStudents(token, assignmentId);
+      setInvitedUsers(updated);
+      
       setInviteOpen(false);
       setInviteQuery("");
       toast({ title: "Invitation sent", description: `Invited @${full.login} (${full.name}) via GitHub.` });
-    } catch {
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to invite user";
       setInviteOpen(false);
       setInviteQuery("");
-      toast({ title: "Invitation sent", description: `Invited @${user.login} via GitHub.` });
+      toast({ title: "Error", description: errorMsg, variant: "destructive" });
     } finally {
       setInviteLoading(false);
     }
@@ -75,9 +130,19 @@ const AssignmentDetail = () => {
             <h1 className="text-2xl font-bold text-foreground">{assignment.name}</h1>
             <p className="mt-1 text-muted-foreground">{assignment.description}</p>
           </div>
-          <Badge variant={assignment.isGroup ? "default" : "secondary"}>
-            {assignment.isGroup ? `Group (max ${assignment.maxGroupSize})` : "Solo"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant={assignment.isGroup ? "default" : "secondary"}>
+              {assignment.isGroup ? `Group (max ${assignment.maxGroupSize})` : "Solo"}
+            </Badge>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-1"
+              onClick={handleDeleteAssignment}
+            >
+              <Trash2 className="h-4 w-4" /> Delete
+            </Button>
+          </div>
         </div>
 
         <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
@@ -122,6 +187,7 @@ const AssignmentDetail = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>GitHub User</TableHead>
+                    <TableHead className="w-20">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -129,6 +195,16 @@ const AssignmentDetail = () => {
                     <TableRow key={inv.id ?? inv.githubUsername}>
                       <TableCell>
                         <UserAvatarName githubUsername={inv.githubUsername} avatarUrl={inv.avatarUrl} name={inv.name} size="sm" />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => inv.id && handleDeleteInvite(inv.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

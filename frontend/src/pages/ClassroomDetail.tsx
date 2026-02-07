@@ -26,7 +26,7 @@ const ClassroomDetail = () => {
     if (!classroomId) return;
     setClassroom(undefined);
     getAccessToken().then((token) => fetchClassroom(token, classroomId).then((c) => setClassroom(c ?? null)));
-  }, [classroomId, getAccessToken]);
+  }, [classroomId]);
 
   if (!classroomId) return <div className="p-8 text-center text-muted-foreground">Classroom not found.</div>;
   if (classroom === null) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
@@ -68,7 +68,7 @@ const ClassroomDetail = () => {
         setAdding(false);
       }
     },
-    [classroomId, students, getAccessToken]
+    [classroomId, students]
   );
 
   const handleOpenChange = useCallback((open: boolean) => {

@@ -43,6 +43,7 @@ export interface InvitedUser {
   avatarUrl?: string;
   name?: string;
   invitedAt?: string;
+  status?: "pending" | "accepted" | "declined";
 }
 
 /** Mock invited users per assignment. Replace with Firebase (e.g. collection assignments/{id}/invited) when backend is ready. */
