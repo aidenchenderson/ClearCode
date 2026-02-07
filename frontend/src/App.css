@@ -1,0 +1,57 @@
+#root {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0;
+  text-align: center;
+}
+
+/* Smooth transitions throughout the app */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Educational theme animations */
+@keyframes gradient-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes soft-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px rgba(100, 150, 255, 0.2));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(100, 150, 255, 0.3));
+  }
+}
+
+.gradient-bg {
+  background: linear-gradient(
+    -45deg,
+    rgba(220, 200, 255, 0.1),
+    rgba(200, 230, 255, 0.08),
+    rgba(180, 240, 200, 0.08),
+    rgba(255, 240, 200, 0.08)
+  );
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+.soft-glow-icon {
+  animation: soft-glow 3s ease-in-out infinite;
+}
+
+/* Smooth card hover effects */
+.card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+}
+
