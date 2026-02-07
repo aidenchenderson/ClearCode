@@ -3,12 +3,9 @@ const vscode = require('vscode');
 const { execSync } = require('child_process');
 const path = require('path');
 
-const ASSIGNMENTS = [
-  'Assignment 1$039',
-  'Assignment 2$2',
-  'Assignment 3$3',
-  'Assignment 4$4'
-];
+
+
+
 
 const dirtyByFile = new Map(); // filePath -> Set(lineNumbers 0-based)
 let cachedIdentity = null;
@@ -128,10 +125,11 @@ function getOpenDocByPath(filePath) {
 
 // ---------------- EXTENSION LIFECYCLE ----------------
 class AssignmentsProvider {
-  constructor(context, identity, output) {
+  constructor(context, identity, output, assignments) {
     this.context = context;
     this.identity = identity;
     this.output = output;
+    this.assignments = assignments;
     this._onDidChangeTreeData = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
   }
@@ -146,7 +144,7 @@ class AssignmentsProvider {
 
   getChildren() {
 
-	const assignments = ASSIGNMENTS;
+	const assignments = this.assignments;
 	const assignmentIDs = ['112', '222', '332', '442'];
 	//print out "username" has these assignments "assignment names"
 	this.output.appendLine(`User ${this.identity} has assignments: ${assignments.join(', ')}`);
@@ -175,7 +173,7 @@ class AssignmentsProvider {
 
 
 
-function activate(context) {
+async function activate(context) {
 	
   const output = vscode.window.createOutputChannel('Live Change Tracker');
 
@@ -185,8 +183,27 @@ function activate(context) {
   output.appendLine(`Live Change Tracker initialized with identity: ${identity}`);
 
 
+  //flask call here to get the assignments for the user (send user identity, get back list of assignments)
+
+	const res = await fetch(
+	`http://localhost:5000/assignments?identity=${encodeURIComponent(identity)}`
+	);
+	const data = await res.json();
+  output.appendLine(`data from flask: ${JSON.stringify(data)}`);
+
+	// data.assignments is your list
+
+
+
+	const ASSIGNMENTS = [
+	'Assignment 1$23',
+	'Assignment 2$2',
+	'Assignment 3$3',
+	'Assignment 4$4'
+	];
+
   // --- Assignments sidebar ---
-  const assignmentsProvider = new AssignmentsProvider(context, identity, output);
+  const assignmentsProvider = new AssignmentsProvider(context, identity, output, ASSIGNMENTS);
   vscode.window.registerTreeDataProvider('assignmentsView', assignmentsProvider);
 
 
