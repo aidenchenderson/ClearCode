@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronRight,
   Github,
-  Bot,
   User,
   Clock,
   Search,
@@ -18,7 +17,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Badge } from "@/components/ui/badge";
 import type { ProgressSection, Session, SessionDetailEntry, SessionCitation } from "@/data/mockData";
 import {
   Dialog,
@@ -57,7 +55,11 @@ function SessionDetailRow({ entry }: { entry: SessionDetailEntry }) {
           {format(new Date(entry.timestamp), "MMM d, h:mm a")}
         </td>
         <td className="py-2 px-2 text-sm tabular-nums">
-          {entry.lineNumber != null ? entry.lineNumber : "—"}
+          {entry.lineNumber != null
+            ? entry.lineNumberEnd != null && entry.lineNumberEnd !== entry.lineNumber
+              ? `${entry.lineNumber}–${entry.lineNumberEnd}`
+              : entry.lineNumber
+            : "—"}
         </td>
         <td className="py-2 px-2 text-sm text-muted-foreground max-w-[200px] truncate" title={entry.filePath ?? undefined}>
           {entry.filePath ?? "—"}
@@ -83,9 +85,15 @@ function SessionDetailRow({ entry }: { entry: SessionDetailEntry }) {
       {showCode && hasCode && (
         <tr className="border-b border-border bg-muted/30">
           <td colSpan={colCount} className="py-2 px-4">
-            <pre className="text-xs font-mono bg-muted/50 p-3 rounded overflow-x-auto whitespace-pre-wrap break-all">
-              {entry.lineContent}
-            </pre>
+            <div className="text-xs font-mono bg-muted/50 p-3 rounded overflow-x-auto space-y-0.5">
+              {(entry.lineContent ?? "")
+                .split("\n")
+                .map((line, i) => (
+                  <div key={i} className="whitespace-pre-wrap break-all">
+                    {line}
+                  </div>
+                ))}
+            </div>
           </td>
         </tr>
       )}
@@ -126,7 +134,7 @@ function SessionRow({
           <span className="text-sm text-muted-foreground tabular-nums shrink-0">
             {session.locChanged} LOC
           </span>
-          {hasCitations && (
+          {hasCitations ? (
             <Dialog open={citationsOpen} onOpenChange={setCitationsOpen}>
               <DialogTrigger asChild>
                 <button
@@ -134,7 +142,7 @@ function SessionRow({
                   onClick={(e) => e.stopPropagation()}
                   className="shrink-0 inline-flex items-center gap-1 text-xs text-primary hover:underline"
                 >
-                  <FileText className="h-3.5 w-3.5" /> Citations
+                  <FileText className="h-3.5 w-3.5" /> Citations ({(session.citations ?? []).length})
                 </button>
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -152,7 +160,7 @@ function SessionRow({
                         </h4>
                         <ul className="space-y-3">
                           {list.map((c, i) => (
-                            <li key={i} className="rounded-md border border-border bg-muted/20 p-3 text-sm">
+                            <li key={`${type}-${i}-${c.timestamp ?? i}`} className="rounded-md border border-border bg-muted/20 p-3 text-sm">
                               <div className="flex items-center gap-2 text-muted-foreground mb-1">
                                 <User className="h-3.5 w-3.5" />
                                 <span>@{c.githubUsername}</span>
@@ -173,16 +181,41 @@ function SessionRow({
                       </div>
                     );
                   })}
+                  {(() => {
+                    const knownTypes = new Set(CITATION_TYPE_ORDER);
+                    const other = (session.citations ?? []).filter((c) => !knownTypes.has(c.type as SessionCitation["type"]));
+                    if (other.length === 0) return null;
+                    return (
+                      <div key="other" className="space-y-2">
+                        <h4 className="text-sm font-medium text-muted-foreground capitalize">Other</h4>
+                        <ul className="space-y-3">
+                          {other.map((c, i) => (
+                            <li key={`other-${i}-${c.timestamp ?? i}`} className="rounded-md border border-border bg-muted/20 p-3 text-sm">
+                              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                                <User className="h-3.5 w-3.5" />
+                                <span>@{c.githubUsername}</span>
+                                <span className="text-xs">
+                                  {format(new Date(c.timestamp), "MMM d, h:mm a")}
+                                </span>
+                              </div>
+                              {c.text ? (
+                                <pre className="text-xs font-mono whitespace-pre-wrap break-words mt-1">
+                                  {c.text}
+                                </pre>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">No text</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
                 </div>
               </DialogContent>
             </Dialog>
-          )}
-          {session.aiUsed ? (
-            <Badge variant="secondary" className="text-xs gap-1 bg-amber-100 text-amber-800 border-0 shrink-0">
-              <Bot className="h-3 w-3" /> AI
-            </Badge>
           ) : (
-            <span className="text-xs text-muted-foreground shrink-0">No AI</span>
+            <span className="text-xs text-muted-foreground shrink-0">No citations</span>
           )}
           {isGroup && session.githubUsernames && session.githubUsernames.length > 0 && (
             <span className="text-xs text-muted-foreground shrink-0">

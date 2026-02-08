@@ -381,7 +381,148 @@ def _to_iso(ts):
         return None
     if hasattr(ts, "isoformat"):
         return ts.isoformat().replace("+00:00", "Z")
+    if hasattr(ts, "timestamp"):
+        # Firestore Timestamp
+        return datetime.fromtimestamp(ts.timestamp(), tz=timezone.utc).isoformat().replace("+00:00", "Z")
     return ts if isinstance(ts, str) else None
+
+
+# Allow citations up to this long after session end to still count (clock skew / ordering).
+CITATION_SESSION_END_BUFFER_SECONDS = 120
+
+
+def _citation_in_session(citation_ts, session_start_iso, session_end_iso):
+    """Return True if citation timestamp falls within session (with small buffer after end)."""
+    start_dt = _parse_iso(session_start_iso)
+    end_dt = _parse_iso(session_end_iso)
+    if start_dt is None or end_dt is None:
+        return False
+    ts = citation_ts
+    if hasattr(ts, "timestamp"):
+        ts = datetime.fromtimestamp(ts.timestamp(), tz=timezone.utc)
+    elif isinstance(ts, str):
+        ts = _parse_iso(ts)
+    else:
+        ts = None
+    if ts is None:
+        return False
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    end_with_buffer = end_dt + timedelta(seconds=CITATION_SESSION_END_BUFFER_SECONDS)
+    return start_dt <= ts <= end_with_buffer
+
+
+def _detail_line_number(d):
+    """Return line number as int, or None if missing/invalid."""
+    v = d.get("lineNumber")
+    if v is None:
+        return None
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _detail_canonical_user(d):
+    """Return canonical username for grouping (lowercase, stripped)."""
+    v = d.get("githubUsername")
+    if v is None:
+        return ""
+    return str(v).strip().lower()
+
+
+def _detail_canonical_file(d):
+    """Return canonical file path for grouping."""
+    v = d.get("filePath")
+    if v is None:
+        return ""
+    return str(v).strip()
+
+
+def _timestamp_minute_bucket(ts_str):
+    """Return a key for grouping by 'same time' (minute precision)."""
+    if not ts_str:
+        return ""
+    dt = _parse_iso(ts_str)
+    if dt is None:
+        return ts_str
+    dt = dt.replace(second=0, microsecond=0)
+    return dt.isoformat()
+
+
+def _merge_consecutive_details(details):
+    """
+    One pass: group by (user, file, time-bucket), then within each group merge
+    consecutive line numbers into one entry per run (e.g. lines 3–49 at same time -> 3–49).
+    Handles duplicate events per line by using the set of line numbers per group.
+    """
+    if not details:
+        return []
+    # Group by (user, file, timestamp minute)
+    groups = {}
+    for d in details:
+        user = _detail_canonical_user(d)
+        file_ = _detail_canonical_file(d)
+        bucket = _timestamp_minute_bucket(d.get("timestamp") or "")
+        key = (user, file_, bucket)
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(d)
+
+    merged = []
+    for (_user, _file, _bucket), group in groups.items():
+        # Unique line numbers in this group (same person, file, time)
+        line_numbers = set()
+        line_to_detail = {}  # line_number -> one detail (for timestamp, content, etc.)
+        for d in group:
+            ln = _detail_line_number(d)
+            if ln is not None:
+                line_numbers.add(ln)
+                if ln not in line_to_detail:
+                    line_to_detail[ln] = d
+        if not line_numbers:
+            for d in group:
+                merged.append(dict(d))
+            continue
+        sorted_lines = sorted(line_numbers)
+        # Consecutive runs: [3,4,5,...,49] -> (3, 49), etc.
+        runs = []
+        run_start = run_end = sorted_lines[0]
+        for ln in sorted_lines[1:]:
+            if ln == run_end + 1:
+                run_end = ln
+            else:
+                runs.append((run_start, run_end))
+                run_start = run_end = ln
+        runs.append((run_start, run_end))
+        # One merged detail per run
+        for run_start, run_end in runs:
+            if run_start == run_end:
+                d = line_to_detail.get(run_start)
+                if d:
+                    merged.append(dict(d))
+                continue
+            details_in_run = [line_to_detail[ln] for ln in range(run_start, run_end + 1) if ln in line_to_detail]
+            first = details_in_run[0]
+            last = details_in_run[-1]
+            contents = [
+                line_to_detail[ln].get("lineContent") if line_to_detail[ln].get("lineContent") is not None else ""
+                for ln in range(run_start, run_end + 1)
+                if ln in line_to_detail
+            ]
+            merged.append({
+                "timestamp": first.get("timestamp"),
+                "locChanged": sum(line_to_detail[ln].get("locChanged", 1) for ln in range(run_start, run_end + 1) if ln in line_to_detail),
+                "aiUsed": first.get("aiUsed"),
+                "githubUsername": first.get("githubUsername"),
+                "lineNumber": run_start,
+                "lineNumberEnd": run_end,
+                "filePath": first.get("filePath"),
+                "lineContent": "\n".join(contents),
+            })
+
+    merged.sort(key=lambda d: (d.get("timestamp") or "", d.get("lineNumber") or 0))
+    return merged
 
 
 def _flush_session_batch(current_batch, sessions, session_id_prefix, session_counter):
@@ -581,6 +722,12 @@ def get_progress_by_assignment_id(assignment_id):
                 "sessions": all_sessions,
             }]
 
+        # Post-pass: merge consecutive same-file same-user line changes into one detail per run
+        for section in sections:
+            for session in section.get("sessions", []):
+                raw = session.get("details", [])
+                session["details"] = _merge_consecutive_details(raw)
+
         # Fetch citations for this assignment and attach to sessions
         try:
             citation_docs = (
@@ -604,13 +751,13 @@ def get_progress_by_assignment_id(assignment_id):
                     user = (c.get("githubUsername") or "").strip().lower()
                     if user not in allowed_users:
                         continue
-                    ts = c.get("timestamp") or ""
-                    if ts < start_t or ts > end_t:
+                    c_ts = c.get("timestamp")
+                    if not _citation_in_session(c_ts, start_t, end_t):
                         continue
                     session_citations.append({
                         "type": c.get("type", ""),
                         "githubUsername": c.get("githubUsername", ""),
-                        "timestamp": ts,
+                        "timestamp": _to_iso(c_ts) or "",
                         "text": c.get("text"),
                     })
                 session["citations"] = session_citations

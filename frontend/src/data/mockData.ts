@@ -41,8 +41,10 @@ export interface SessionDetailEntry {
   aiUsed: boolean;
   /** For group work: which user made this change. */
   githubUsername?: string;
-  /** Line number in the file (1-based). */
+  /** Line number in the file (1-based). When merged, start of range. */
   lineNumber?: number | null;
+  /** When merged consecutive lines: end of range (e.g. 2 and 4 → "2–4"). */
+  lineNumberEnd?: number | null;
   /** File path (e.g. src/index.ts). */
   filePath?: string | null;
   /** Full line of code text; expand with + to see. */
