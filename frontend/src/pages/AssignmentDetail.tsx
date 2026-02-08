@@ -385,9 +385,9 @@ const AssignmentDetail = () => {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       <TopBar />
-      <main className="mx-auto max-w-4xl px-4 py-8">
+      <main className="flex-1 mx-auto max-w-4xl px-4 py-8 w-full">
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">

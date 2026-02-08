@@ -14,9 +14,9 @@ const ProgressDemo = () => {
   const [progressSearch, setProgressSearch] = useState("");
 
   return (
-    <div className="min-h-screen gradient-bg relative overflow-hidden">
+    <div className="min-h-screen flex flex-col gradient-bg relative overflow-hidden">
       <TopBar />
-      <main className="mx-auto max-w-6xl px-4 py-8 relative z-10">
+      <main className="flex-1 mx-auto max-w-6xl px-4 py-8 relative z-10 w-full">
         <div className="mb-8">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             Progress Tracking Demo

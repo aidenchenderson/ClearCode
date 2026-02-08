@@ -79,12 +79,12 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen gradient-bg relative overflow-hidden">
+    <div className="min-h-screen flex flex-col gradient-bg relative overflow-hidden">
       <TopBar />
-      <main className="mx-auto max-w-6xl px-4 py-8 relative z-10">
+      <main className="flex-1 mx-auto max-w-6xl px-4 py-8 relative z-10 w-full">
         <div className="mb-8 animate-fade-in-up">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Professor Dashboard
+          <h1 className="text-3xl font-bold text-foreground">
+            Dashboard
           </h1>
           <p className="mt-2 text-muted-foreground">
             Manage your assignments and classrooms.

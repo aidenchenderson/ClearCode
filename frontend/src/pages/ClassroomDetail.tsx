@@ -243,9 +243,9 @@ const ClassroomDetail = () => {
   const students = base.students;
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       <TopBar />
-      <main className="mx-auto max-w-4xl px-4 py-8">
+      <main className="flex-1 mx-auto max-w-4xl px-4 py-8 w-full">
         {editingField === "name" ? (
           <div className="flex flex-wrap items-center gap-2">
             <Input

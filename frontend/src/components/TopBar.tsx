@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { GraduationCap, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -31,10 +31,7 @@ const TopBar = () => {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
           <Link to="/" className="flex items-center gap-2 font-semibold text-foreground">
-            <div className="p-2 rounded-lg bg-muted">
-              <GraduationCap className="h-5 w-5 text-foreground" />
-            </div>
-            <span className="font-bold text-foreground">EduTransparency</span>
+            <span className="font-bold text-foreground">ClearCode</span>
           </Link>
           <div className="ml-2">
             <Breadcrumbs />

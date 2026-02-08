@@ -71,7 +71,8 @@ const Landing = () => {
 
       {/* Hero */}
       <section className="flex flex-1 flex-col items-center justify-center px-4 py-24 text-center relative z-10">
-        <div className="animate-fade-in-up">
+        <div className="animate-fade-in-up flex flex-col items-center gap-6">
+          <img src="/ClearCodeLogo.png" alt="ClearCode" className="h-20 sm:h-24 w-auto" />
           <h1 className="max-w-3xl text-5xl sm:text-6xl font-bold tracking-tight text-foreground leading-tight">
             Transparency in <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Code-Based</span> Education
           </h1>

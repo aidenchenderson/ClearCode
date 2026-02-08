@@ -61,9 +61,9 @@ const GroupDetail = () => {
     );
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       <TopBar />
-      <main className="mx-auto max-w-3xl px-4 py-8">
+      <main className="flex-1 mx-auto max-w-3xl px-4 py-8 w-full">
         <h1 className="text-2xl font-bold text-foreground">{group.name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Assignment: {assignment.name}
