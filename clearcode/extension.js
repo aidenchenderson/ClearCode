@@ -125,6 +125,10 @@ function getOpenDocByPath(filePath) {
   );
 }
 
+
+
+
+
 // ---------------- EXTENSION LIFECYCLE ----------------
 class AssignmentsProvider {
   constructor(context, identity, output, assignments, descByName = {}) {
@@ -357,91 +361,192 @@ const assignmentsProvider = new AssignmentsProvider(
     }
   });
 
-  const interval = setInterval(() => {
-    if (dirtyByFile.size === 0) return;
+let citationPromptInFlight = false;
 
-    output.appendLine(
-      `\n=== ${identity} @ ${new Date().toLocaleTimeString()} ===`,
-    );
+async function pushToFlask(payload, output) {
+  try {
+    const res = await fetch("http://localhost:5000/api/v1/assignments/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-    for (const [filePath, linesSet] of dirtyByFile.entries()) {
-      const doc = getOpenDocByPath(filePath);
-      const repoLink = getRepoLinkForFile(filePath);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    output.appendLine("Flask response: " + JSON.stringify(data));
+  } catch (err) {
+    output.appendLine("Failed to push payload: " + String(err?.message || err));
+  }
+}
 
-      if (!doc) {
-        output.appendLine(
-          `${identity} | ${repoLink} | ${path.basename(filePath)} (not open)`,
-        );
-        continue;
-      }
+async function pushCitationToFlask(payload, output) {
+  try {
+    const res = await fetch("http://localhost:5000/api/v1/assignments/citations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-      const lines = Array.from(linesSet).sort((a, b) => a - b);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    output.appendLine("Citations response: " + JSON.stringify(data));
+  } catch (err) {
+    output.appendLine("Failed to push citation: " + String(err?.message || err));
+  }
+}
 
-      for (const line0 of lines) {
-        if (line0 < 0 || line0 >= doc.lineCount) continue;
-        const text = doc.lineAt(line0).text;
+const interval = setInterval(async () => {
+  if (dirtyByFile.size === 0) return;
 
-        //push to firebase only if edited file is part of an assignment
-        let assignmentWantedFiles = [];
+  // ---------------- NEW: count total changed lines in this 60s window ----------------
+  let totalChangedLines = 0;
+  const changedFiles = [];
+
+  for (const [filePath, linesSet] of dirtyByFile.entries()) {
+    totalChangedLines += linesSet.size; // unique line numbers per file
+    changedFiles.push(filePath);
+  }
+
+  // ---------------- NEW: if >= 20 lines, prompt user for citation ----------------
+  if (totalChangedLines >= 20 && !citationPromptInFlight) {
+    citationPromptInFlight = true;
+    try {
+      // try infer impacted assignment(s) based on file mappings
+      const impacted = [];
+      for (const fp of changedFiles) {
+        const base = path.basename(fp);
+
         for (const name of assignments) {
           const key = `assignmentFile:${name}`;
-          const WantedAssignmentFile = context.globalState.get(key, "not set");
-          assignmentWantedFiles.push({ name, file: WantedAssignmentFile });
-        }
+          const wanted = context.globalState.get(key, "not set");
+          const wantedBase = wanted ? path.basename(String(wanted)) : "not set";
 
-        for (const a of assignmentWantedFiles) {
-          if (a.file !== "not set" && a.file === path.basename(filePath)) {
-            output.appendLine(
-              `File ${a.file} is associated with assignment ${a.name}`,
-            );
-            //push to flask
-
-            //asignmentIDs
-            output.appendLine(
-              `${identity} | ${repoLink} | ${path.basename(filePath)} : Line ${line0 + 1} → ${text}`,
-            );
-
-            const payload = {
-              AssignmentID: assignmentIDs[assignments.indexOf(a.name)],
-              GitHubName: identity, // or assignments/assignmentIDs
-              GitHubLink: repoLink,
-              FilePath: path.basename(filePath),
-              LineNumber: line0 + 1,
-              LineContent: text,
-              updatedAt: new Date().toISOString(),
-            };
-            output.appendLine(
-              "payload to send to flask: " + JSON.stringify(payload),
-            );
-            //flask send here
-
-            async function pushToFlask(payload, output) {
-              try {
-                const res = await fetch(
-                  "http://localhost:5000/api/v1/assignments/push",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
-                  },
-                );
-
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
-                output.appendLine("Flask response: " + JSON.stringify(data));
-              } catch (err) {
-                output.appendLine("Failed to push payload: " + err.message);
-              }
-            }
-            pushToFlask(payload, output);
+          if (wanted !== "not set" && (wanted === base || wantedBase === base)) {
+            impacted.push(name);
           }
         }
       }
+
+      const uniqueImpacted = [...new Set(impacted)];
+
+      let chosenAssignment = null;
+      if (uniqueImpacted.length === 1) {
+        chosenAssignment = uniqueImpacted[0];
+      } else {
+        const pickFrom = uniqueImpacted.length > 0 ? uniqueImpacted : assignments;
+        chosenAssignment = await vscode.window.showQuickPick(pickFrom, {
+          title: "Citation required",
+          placeHolder: "Which assignment is this for?",
+          ignoreFocusOut: true,
+        });
+        if (!chosenAssignment) {
+          // user cancelled: just skip the citation this cycle
+          citationPromptInFlight = false;
+          return;
+        }
+      }
+
+      const idx = assignments.indexOf(chosenAssignment);
+      const assignmentId = idx >= 0 ? assignmentIDs[idx] : null;
+
+      const aiPrompt = await vscode.window.showInputBox({
+        title: "Citation required",
+        prompt: `You changed ~${totalChangedLines} lines in the last 60 seconds. What was your AI prompt (if any)?`,
+        placeHolder: "Paste your prompt here (or write 'N/A')",
+        ignoreFocusOut: true,
+      });
+      if (aiPrompt === undefined) {
+        citationPromptInFlight = false;
+        return;
+      }
+
+      const source = await vscode.window.showInputBox({
+        title: "Citation required",
+        prompt: "If you copied/pasted, where did it come from? (URL, file, tool, notes, etc.)",
+        placeHolder: "e.g. ChatGPT link, docs, tutorial URL… (or 'N/A')",
+        ignoreFocusOut: true,
+      });
+      if (source === undefined) {
+        citationPromptInFlight = false;
+        return;
+      }
+
+      const citationPayload = {
+        AssignmentID: assignmentId,
+        AssignmentName: chosenAssignment,
+        GitHubName: identity,
+        changedLinesInWindow: totalChangedLines,
+        windowSeconds: 20,
+        filesTouched: changedFiles.map((fp) => path.basename(fp)),
+        aiPrompt,
+        source,
+        createdAt: new Date().toISOString(),
+      };
+
+      output.appendLine("citation payload: " + JSON.stringify(citationPayload));
+      await pushCitationToFlask(citationPayload, output);
+      vscode.window.showInformationMessage("Citation submitted.");
+    } finally {
+      citationPromptInFlight = false;
+    }
+  }
+
+  // ---------------- your existing printing + pushing logic ----------------
+  output.appendLine(`\n=== ${identity} @ ${new Date().toLocaleTimeString()} ===`);
+
+  for (const [filePath, linesSet] of dirtyByFile.entries()) {
+    const doc = getOpenDocByPath(filePath);
+    const repoLink = getRepoLinkForFile(filePath);
+
+    if (!doc) {
+      output.appendLine(`${identity} | ${repoLink} | ${path.basename(filePath)} (not open)`);
+      continue;
     }
 
-    dirtyByFile.clear();
-    output.show(true);
-  }, 60_000);
+    const lines = Array.from(linesSet).sort((a, b) => a - b);
+
+    for (const line0 of lines) {
+      if (line0 < 0 || line0 >= doc.lineCount) continue;
+      const text = doc.lineAt(line0).text;
+
+      // build assignmentWantedFiles once per interval (optional micro-optimization)
+      const assignmentWantedFiles = assignments.map((name) => {
+        const key = `assignmentFile:${name}`;
+        const wanted = context.globalState.get(key, "not set");
+        return { name, file: wanted };
+      });
+
+      for (const a of assignmentWantedFiles) {
+        // IMPORTANT: compare by basename in case you stored relative path in globalState
+        const wantedBase = a.file ? path.basename(String(a.file)) : "not set";
+
+        if (a.file !== "not set" && wantedBase === path.basename(filePath)) {
+          output.appendLine(`File ${wantedBase} is associated with assignment ${a.name}`);
+
+          output.appendLine(
+            `${identity} | ${repoLink} | ${path.basename(filePath)} : Line ${line0 + 1} → ${text}`,
+          );
+
+          const payload = {
+            AssignmentID: assignmentIDs[assignments.indexOf(a.name)],
+            GitHubName: identity,
+            GitHubLink: repoLink,
+            FilePath: path.basename(filePath),
+            LineNumber: line0 + 1,
+            LineContent: text,
+            updatedAt: new Date().toISOString(),
+          };
+
+          output.appendLine("payload to send to flask: " + JSON.stringify(payload));
+          await pushToFlask(payload, output);
+        }
+      }
+    }
+  }
+
+  dirtyByFile.clear();
+  output.show(true);
+}, 20_000);
 
   context.subscriptions.push(changeListener);
   context.subscriptions.push({ dispose: () => clearInterval(interval) });

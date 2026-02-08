@@ -173,31 +173,104 @@ def push_line_event():
 
 @bp.route("/citations", methods=["POST"])
 def push_citation():
-    """
-    Store a citation from the extension. Body: assignmentId, githubUsername, type, timestamp (optional).
-    type must be one of: agent prompt, external ai prompt, external source (manual).
-    """
+    print("==== /citations HIT ====")
+    print("method:", request.method)
+    print("headers:", dict(request.headers))
+    print("raw data:", request.data)
+
     payload = request.get_json(silent=True)
+    print("parsed payload:", payload)
+    print("payload type:", type(payload))
+
     if payload is None or not isinstance(payload, dict):
+        print("❌ payload is not a dict or is None")
         return jsonify({"error": "Expected JSON object"}), 400
 
-    assignment_id = (payload.get("assignmentId") or "").strip()
-    github_username = (payload.get("githubUsername") or "").strip().lower()
-    citation_type = (payload.get("type") or "").strip()
-    timestamp = payload.get("timestamp")
+    # --------- Accept keys from the JS payload ----------
+    assignment_id = payload.get("AssignmentID")
+    print("raw AssignmentID:", assignment_id, type(assignment_id))
 
+    assignment_id = str(assignment_id).strip() if assignment_id is not None else ""
+    print("normalized assignment_id:", assignment_id)
+
+    github_username = payload.get("GitHubName")
+    print("raw GitHubName:", github_username, type(github_username))
+
+    github_username = str(github_username).strip().lower() if github_username is not None else ""
+    print("normalized github_username:", github_username)
+
+    # --------- citation type ----------
+    citation_type = (payload.get("type") or "").strip()
+    print("initial citation_type:", citation_type)
+
+    if not citation_type:
+        if (payload.get("aiPrompt") or "").strip():
+            citation_type = "external ai prompt"
+        elif (payload.get("source") or "").strip():
+            citation_type = "external source (manual)"
+        else:
+            citation_type = "external source (manual)"
+
+    print("final citation_type:", citation_type)
+
+    # --------- timestamp ----------
+    timestamp = payload.get("timestamp") or payload.get("createdAt")
+    print("raw timestamp:", timestamp)
+
+    # --------- text ----------
+    text = (payload.get("text") or payload.get("content") or "").strip()
+    print("initial text:", text)
+
+    if not text:
+        ai_prompt = (payload.get("aiPrompt") or "").strip()
+        source = (payload.get("source") or "").strip()
+
+        print("ai_prompt:", ai_prompt)
+        print("source:", source)
+
+        parts = []
+        if ai_prompt:
+            parts.append(f"AI prompt:\n{ai_prompt}")
+        if source:
+            parts.append(f"Source:\n{source}")
+
+        if payload.get("changedLinesInWindow") is not None:
+            parts.append(
+                f"Context: changedLinesInWindow={payload.get('changedLinesInWindow')}, "
+                f"windowSeconds={payload.get('windowSeconds')}"
+            )
+
+        files_touched = payload.get("filesTouched")
+        print("filesTouched:", files_touched)
+
+        if isinstance(files_touched, list) and files_touched:
+            parts.append("Files: " + ", ".join(map(str, files_touched)))
+
+        text = "\n\n".join(parts).strip() or None
+
+    print("final text:", text)
+
+    # --------- Validation ----------
     if not assignment_id:
-        return jsonify({"error": "assignmentId is required"}), 400
+        print("❌ validation failed: assignment_id missing")
+        return jsonify({"error": "assignmentId/AssignmentID is required"}), 400
+
     if not github_username:
-        return jsonify({"error": "githubUsername is required"}), 400
+        print("❌ validation failed: github_username missing")
+        return jsonify({"error": "githubUsername/GitHubName is required"}), 400
+
     if citation_type not in CITATION_TYPES:
+        print("❌ validation failed: invalid citation_type", citation_type)
         return jsonify({
             "error": "type must be one of: agent prompt, external ai prompt, external source (manual)",
             "received": citation_type or "(empty)",
         }), 400
 
     db = get_firestore()
+    print("firestore instance:", db)
+
     if db is None:
+        print("❌ firestore not configured")
         return jsonify({"error": "Database not configured"}), 503
 
     try:
@@ -206,19 +279,28 @@ def push_citation():
         else:
             timestamp = str(timestamp)
 
-        text = (payload.get("text") or payload.get("content") or "").strip() or None
+        print("final timestamp:", timestamp)
 
         doc_ref = db.collection(CITATIONS_COLLECTION).document()
+        print("writing firestore doc id:", doc_ref.id)
+
         doc_ref.set({
             "assignmentId": assignment_id,
             "githubUsername": github_username,
             "type": citation_type,
             "timestamp": timestamp,
             "text": text,
+            "assignmentName": payload.get("AssignmentName") or payload.get("assignmentName"),
+            "changedLinesInWindow": payload.get("changedLinesInWindow"),
+            "windowSeconds": payload.get("windowSeconds"),
+            "filesTouched": payload.get("filesTouched"),
         })
 
+        print("✅ citation stored successfully")
         return jsonify({"ok": True, "id": doc_ref.id}), 201
+
     except Exception as e:
+        print("🔥 exception while saving citation:", repr(e))
         current_app.logger.exception("Push citation failed")
         return jsonify({"error": str(e)}), 500
 

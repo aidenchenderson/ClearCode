@@ -16,8 +16,8 @@
     "activitybar": [
       {
         "id": "liveChangeTracker",
-        "title": "Live Tracker",
-        "icon": "media/icon.svg"
+        "title": "Clear Code",
+        "icon": "media/clear.png"
       }
     ]
   },
