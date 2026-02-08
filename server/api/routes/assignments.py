@@ -108,11 +108,13 @@ def get_assignments_by_github_id():
             assignments_list.append({
                 "id": data.get("assignmentId"),
                 "name": data.get("assignmentName"),
-                "description": data.get("assignmentDesc", ""),
+
+                "desc": data.get("assignmentDesc")
             })
 
 
-        print("here!")
+        print("here!?!??!")
+        print(assignments_list)
         print(jsonify({
             "assignments": assignments_list,
             "identity": identity
