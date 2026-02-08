@@ -8,6 +8,8 @@ import {
   User,
   Clock,
   Search,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,31 +30,58 @@ function formatTimeRange(start: string, end: string): string {
 }
 
 function SessionDetailRow({ entry }: { entry: SessionDetailEntry }) {
+  const [showCode, setShowCode] = useState(false);
+  const hasCode = entry.lineContent != null && entry.lineContent !== "";
+  const colCount = 5;
   return (
-    <tr className="border-b border-border last:border-0">
-      <td className="py-2 pl-4 pr-2 text-sm text-muted-foreground whitespace-nowrap">
-        {entry.githubUsername ? (
-          <span className="flex items-center gap-1">
-            <User className="h-3.5 w-3.5" />@{entry.githubUsername}
-          </span>
-        ) : (
-          "—"
-        )}
-      </td>
-      <td className="py-2 px-2 text-sm whitespace-nowrap">
-        {format(new Date(entry.timestamp), "MMM d, h:mm a")}
-      </td>
-      <td className="py-2 px-2 text-sm tabular-nums">{entry.locChanged} LOC</td>
-      <td className="py-2 px-2">
-        {entry.aiUsed ? (
-          <Badge variant="secondary" className="text-xs gap-1 bg-amber-100 text-amber-800 border-0">
-            <Bot className="h-3 w-3" /> AI used
-          </Badge>
-        ) : (
-          <span className="text-xs text-muted-foreground">No AI</span>
-        )}
-      </td>
-    </tr>
+    <>
+      <tr className="border-b border-border last:border-0">
+        <td className="py-2 pl-4 pr-2 text-sm text-muted-foreground whitespace-nowrap">
+          {entry.githubUsername ? (
+            <span className="flex items-center gap-1">
+              <User className="h-3.5 w-3.5" />@{entry.githubUsername}
+            </span>
+          ) : (
+            "—"
+          )}
+        </td>
+        <td className="py-2 px-2 text-sm whitespace-nowrap">
+          {format(new Date(entry.timestamp), "MMM d, h:mm a")}
+        </td>
+        <td className="py-2 px-2 text-sm tabular-nums">
+          {entry.lineNumber != null ? entry.lineNumber : "—"}
+        </td>
+        <td className="py-2 px-2 text-sm text-muted-foreground max-w-[200px] truncate" title={entry.filePath ?? undefined}>
+          {entry.filePath ?? "—"}
+        </td>
+        <td className="py-2 pr-4 pl-2 text-right w-10">
+          {hasCode ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowCode((v) => !v);
+              }}
+              className="text-muted-foreground hover:text-foreground p-1 rounded"
+              aria-label={showCode ? "Hide code" : "Show code"}
+            >
+              {showCode ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            </button>
+          ) : (
+            <span className="text-muted-foreground/50">—</span>
+          )}
+        </td>
+      </tr>
+      {showCode && hasCode && (
+        <tr className="border-b border-border bg-muted/30">
+          <td colSpan={colCount} className="py-2 px-4">
+            <pre className="text-xs font-mono bg-muted/50 p-3 rounded overflow-x-auto whitespace-pre-wrap break-all">
+              {entry.lineContent}
+            </pre>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -100,8 +129,9 @@ function SessionRow({
                 <tr className="border-b border-border bg-muted/50">
                   <th className="text-left py-2 pl-4 pr-2 font-medium text-muted-foreground">User</th>
                   <th className="text-left py-2 px-2 font-medium text-muted-foreground">Time</th>
-                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">LOC</th>
-                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">AI</th>
+                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">Line #</th>
+                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">File</th>
+                  <th className="text-right py-2 pr-4 pl-2 font-medium text-muted-foreground w-10" />
                 </tr>
               </thead>
               <tbody>
@@ -192,7 +222,10 @@ export function AssignmentProgress({
   const search = searchProp !== undefined ? searchProp : internalSearch;
   const setSearch = onSearchChange ?? setInternalSearch;
 
-  const allSections = sectionsProp ?? [];
+  const allSections = useMemo(
+    () => (sectionsProp ?? []).filter((s) => (s.sessions?.length ?? 0) > 0),
+    [sectionsProp],
+  );
   const sections = useMemo(() => {
     if (!allSections.length) return [];
     const q = search.trim().toLowerCase();
