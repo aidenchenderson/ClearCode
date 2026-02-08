@@ -127,11 +127,12 @@ function getOpenDocByPath(filePath) {
 
 // ---------------- EXTENSION LIFECYCLE ----------------
 class AssignmentsProvider {
-  constructor(context, identity, output, assignments) {
+  constructor(context, identity, output, assignments, descByName = {}) {
     this.context = context;
     this.identity = identity;
     this.output = output;
     this.assignments = assignments;
+    this.descByName = descByName; // <-- ADDED
     this._onDidChangeTreeData = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
   }
@@ -144,10 +145,71 @@ class AssignmentsProvider {
     return item;
   }
 
-  getChildren() {
+  // NOTE: VS Code calls getChildren(element). If element is undefined -> root items.
+  getChildren(element) {
+    // ----- ADDED: if user expanded an assignment, show its description as a child -----
+// ----- ADDED: if user expanded an assignment, show its description as children -----
+if (element && element._lctType === "assignment") {
+  const name = element._lctName;
+  const descRaw = this.descByName?.[name] || "(No description)";
+
+  // Wrap text into multiple lines so it doesn't get "..."
+  function wrapText(text, maxLen = 70) {
+    // Preserve existing newlines (split paragraphs)
+    const paragraphs = String(text).split(/\r?\n/);
+    const lines = [];
+
+    for (const p of paragraphs) {
+      const words = p.split(/\s+/).filter(Boolean);
+      if (words.length === 0) {
+        lines.push(""); // blank line between paragraphs
+        continue;
+      }
+
+      let cur = "";
+      for (const w of words) {
+        const next = cur ? `${cur} ${w}` : w;
+        if (next.length > maxLen && cur) {
+          lines.push(cur);
+          cur = w;
+        } else {
+          cur = next;
+        }
+      }
+      if (cur) lines.push(cur);
+    }
+
+    // Avoid returning nothing
+    return lines.length ? lines : ["(No description)"];
+  }
+
+  const wrapped = wrapText(descRaw, 70);
+
+  const header = new vscode.TreeItem(
+    "Description:",
+    vscode.TreeItemCollapsibleState.None,
+  );
+  /** @type {any} */ (header)._lctType = "assignmentDescHeader";
+  header.tooltip = descRaw;
+
+  const children = wrapped.map((line) => {
+    const child = new vscode.TreeItem(
+      line || " ", // keep blank lines visible-ish
+      vscode.TreeItemCollapsibleState.None,
+    );
+    /** @type {any} */ (child)._lctType = "assignmentDescLine";
+    child.tooltip = descRaw; // full text on hover
+    return child;
+  });
+
+  return [header, ...children];
+}
+// -------------------------------------------------------------------------------
+
+    // -------------------------------------------------------------------------------
+
     const assignments = this.assignments;
     const assignmentIDs = ["112", "222", "332", "442"];
-    //print out "username" has these assignments "assignment names"
     this.output.appendLine(
       `User ${this.identity} has assignments: ${assignments.join(", ")}`,
     );
@@ -156,10 +218,15 @@ class AssignmentsProvider {
       const key = `assignmentFile:${name}`;
       const currentFile = this.context.globalState.get(key, "not set");
 
+      // CHANGED ONLY: make this item collapsible so it can drop down
       const item = new vscode.TreeItem(
         `${name}  —  ${currentFile}`,
-        vscode.TreeItemCollapsibleState.None,
+        vscode.TreeItemCollapsibleState.Collapsed,
       );
+
+      // ADDED: tag so getChildren(element) knows this is an assignment parent
+    /** @type {any} */ (item)._lctType = "assignment";
+    /** @type {any} */ (item)._lctName = name;
 
       item.contextValue = "assignmentItem";
       item.command = {
@@ -167,6 +234,10 @@ class AssignmentsProvider {
         title: "Set Assignment File",
         arguments: [name],
       };
+
+      // optional: show desc on hover for the parent too
+      const d = this.descByName?.[name];
+      if (d) item.tooltip = d;
 
       return item;
     });
@@ -188,6 +259,7 @@ async function activate(context) {
 
   let assignments = [];
   let assignmentIDs = [];
+  let descs = [];
   try {
     const res = await fetch(
       `http://localhost:5000/api/v1/assignments/by-github-id?identity=${encodeURIComponent(identity)}`,
@@ -197,23 +269,36 @@ async function activate(context) {
     output.appendLine(`data from flask: ${JSON.stringify(data)}`);
     assignments = (data.assignments || []).map((a) => a.name);
     assignmentIDs = (data.assignments || []).map((a) => a.id);
+    descs = (data.assignments || []).map((a) => a.desc);
+
   } catch (err) {
     output.appendLine(`Failed to fetch assignments: ${err.message}`);
     assignments = [];
   }
 
   // data.assignments is your list
+    output.appendLine(descs + " is the list of descriptions");
 
   const ASSIGNMENTS =
     assignments.length > 0 ? assignments : ["No Assignments Found"];
 
+    const descByName = {};
+if (Array.isArray(assignments) && Array.isArray(descs)) {
+  for (let i = 0; i < assignments.length; i++) {
+    descByName[assignments[i]] = descs[i];
+  }
+}
+
+
   // --- Assignments sidebar ---
-  const assignmentsProvider = new AssignmentsProvider(
-    context,
-    identity,
-    output,
-    ASSIGNMENTS,
-  );
+const assignmentsProvider = new AssignmentsProvider(
+  context,
+  identity,
+  output,
+  ASSIGNMENTS,
+  descByName, // <-- ADDED
+);
+
   vscode.window.registerTreeDataProvider(
     "assignmentsView",
     assignmentsProvider,
@@ -227,20 +312,26 @@ async function activate(context) {
         const key = `assignmentFile:${assignmentName}`;
         const current = context.globalState.get(key, "");
 
-        const file = await vscode.window.showInputBox({
+        // get all files in the workspace
+        const files = await vscode.workspace.findFiles("**/*", "**/node_modules/**");
+
+        const fileItems = files.map((f) =>
+          vscode.workspace.asRelativePath(f)
+        );
+
+        const picked = await vscode.window.showQuickPick(fileItems, {
           title: `${assignmentName} file`,
-          prompt:
-            "Enter the filename or relative path in your repo (e.g., A1.py or src/A1.py)",
-          value: current || "",
+          placeHolder: "Select the file for this assignment",
           ignoreFocusOut: true,
+          canPickMany: false,
         });
 
-        if (file === undefined) return; // user cancelled
+        if (!picked) return; // user cancelled
 
-        await context.globalState.update(key, file.trim() || "not set");
+        await context.globalState.update(key, picked);
         assignmentsProvider.refresh();
         vscode.window.showInformationMessage(
-          `${assignmentName} file set to: ${file.trim() || "not set"}`,
+          `${assignmentName} file set to: ${picked || "not set"}`,
         );
       },
     ),
