@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -24,14 +24,17 @@ const schema = z.object({
 
 interface Props {
   onCreated: (c: Classroom) => void;
+  /** Called after create; can return a Promise (e.g. refetch). Dialog awaits before closing. */
+  onSuccess?: () => void | Promise<void>;
   children: React.ReactNode;
 }
 
-const CreateClassroomDialog = ({ onCreated, children }: Props) => {
+const CreateClassroomDialog = ({ onCreated, onSuccess, children }: Props) => {
   const [open, setOpen] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [validating, setValidating] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { user, getAccessToken } = useAuth();
   const form = useForm<z.infer<typeof schema>>({ resolver: zodResolver(schema), defaultValues: { name: "", description: "" } });
 
@@ -65,18 +68,31 @@ const CreateClassroomDialog = ({ onCreated, children }: Props) => {
       toast({ title: "Sign in required", variant: "destructive" });
       return;
     }
-    const token = await getAccessToken();
-    const created = await createClassroom(token, {
-      name: values.name,
-      description: values.description,
-      students,
-    });
-    onCreated(created);
-    toast({ title: "Classroom created", description: created.name });
-    form.reset();
-    setStudents([]);
-    setTagInput("");
-    setOpen(false);
+    setIsLoading(true);
+    try {
+      const token = await getAccessToken();
+      const created = await createClassroom(token, {
+        name: values.name,
+        description: values.description,
+        students,
+      });
+      onCreated(created);
+      await onSuccess?.();
+      toast({ title: "Classroom created", description: created.name });
+      form.reset();
+      setStudents([]);
+      setTagInput("");
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to create classroom",
+        variant: "destructive",
+      });
+      return;
+    } finally {
+      setIsLoading(false);
+      setOpen(false);
+    }
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -92,15 +108,34 @@ const CreateClassroomDialog = ({ onCreated, children }: Props) => {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Create New Classroom</DialogTitle>
-          <DialogDescription>Set up a new classroom and add students by GitHub username.</DialogDescription>
+          <DialogDescription>
+            Set up a new classroom and add students by GitHub username. This is just for you and not visible to students.
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="name" render={({ field }) => (
-              <FormItem><FormLabel>Classroom Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem>
+                <FormLabel>Classroom Name</FormLabel>
+                <FormControl>
+                  <Input {...field} disabled={isLoading} placeholder="e.g. CS101 or course code" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
             )} />
             <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} rows={2} /></FormControl><FormMessage /></FormItem>
+              <FormItem>
+                <FormLabel>Description</FormLabel>
+                <FormControl>
+                  <Textarea
+                    {...field}
+                    rows={2}
+                    disabled={isLoading}
+                    placeholder="e.g. semester, class size, section, or other notes…"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
             )} />
             <div className="space-y-2">
               <label className="text-sm font-medium">Add students (GitHub)</label>
@@ -108,16 +143,16 @@ const CreateClassroomDialog = ({ onCreated, children }: Props) => {
                 value={tagInput}
                 onChange={setTagInput}
                 onSelect={(u) => void addUserFromSearch(u)}
-                disabled={validating}
+                disabled={validating || isLoading}
                 placeholder="Search GitHub username…"
                 searchOnlyOnChange
               />
               {students.length > 0 && (
-                <ul className="flex flex-col gap-2 pt-2">
+                <ul className="flex flex-col gap-2 pt-2 max-h-[10.5rem] overflow-y-auto">
                   {students.map((s) => (
                     <li key={s.githubUsername} className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
                       <UserAvatarName githubUsername={s.githubUsername} avatarUrl={s.avatarUrl} name={s.name} size="sm" />
-                      <button type="button" onClick={() => removeStudent(s.githubUsername)} className="rounded p-1 hover:bg-destructive/20 hover:text-destructive">
+                      <button type="button" onClick={() => removeStudent(s.githubUsername)} disabled={isLoading} className="rounded p-1 hover:bg-destructive/20 hover:text-destructive disabled:opacity-50">
                         <X className="h-4 w-4" />
                       </button>
                     </li>
@@ -125,7 +160,9 @@ const CreateClassroomDialog = ({ onCreated, children }: Props) => {
                 </ul>
               )}
             </div>
-            <Button type="submit" className="w-full">Create Classroom</Button>
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</> : "Create Classroom"}
+            </Button>
           </form>
         </Form>
       </DialogContent>

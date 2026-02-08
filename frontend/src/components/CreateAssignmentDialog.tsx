@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -30,11 +30,14 @@ type FormValues = z.infer<typeof schema>;
 
 interface Props {
   onCreated: (a: Assignment) => void;
+  /** Called after create; can return a Promise (e.g. refetch). Dialog awaits before closing. */
+  onSuccess?: () => void | Promise<void>;
   children: React.ReactNode;
 }
 
-const CreateAssignmentDialog = ({ onCreated, children }: Props) => {
+const CreateAssignmentDialog = ({ onCreated, onSuccess, children }: Props) => {
   const [open, setOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { user, getAccessToken } = useAuth();
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -48,21 +51,34 @@ const CreateAssignmentDialog = ({ onCreated, children }: Props) => {
       toast({ title: "Sign in required", variant: "destructive" });
       return;
     }
-    const assignmentData = {
-      name: values.name,
-      description: values.description,
-      createdAt: new Date().toISOString().slice(0, 10),
-      dueDate: format(values.dueDate, "yyyy-MM-dd"),
-      isGroup: values.isGroup,
-      maxGroupSize: values.isGroup ? values.maxGroupSize : undefined,
-      groups: [],
-    };
-    const token = await getAccessToken();
-    const created = await createAssignment(token, assignmentData);
-    onCreated(created);
-    toast({ title: "Assignment created", description: created.name });
-    form.reset();
-    setOpen(false);
+    setIsLoading(true);
+    try {
+      const assignmentData = {
+        name: values.name,
+        description: values.description,
+        createdAt: new Date().toISOString().slice(0, 10),
+        dueDate: format(values.dueDate, "yyyy-MM-dd"),
+        isGroup: values.isGroup,
+        maxGroupSize: values.isGroup ? values.maxGroupSize : undefined,
+        groups: [],
+      };
+      const token = await getAccessToken();
+      const created = await createAssignment(token, assignmentData);
+      onCreated(created);
+      await onSuccess?.();
+      toast({ title: "Assignment created", description: created.name });
+      form.reset();
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to create assignment",
+        variant: "destructive",
+      });
+      return;
+    } finally {
+      setIsLoading(false);
+      setOpen(false);
+    }
   };
 
   return (
@@ -76,16 +92,33 @@ const CreateAssignmentDialog = ({ onCreated, children }: Props) => {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="name" render={({ field }) => (
-              <FormItem><FormLabel>Assignment Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem>
+                <FormLabel>Assignment Name</FormLabel>
+                <FormControl>
+                  <Input {...field} disabled={isLoading} placeholder="e.g. CS101 - Assignment 1" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
             )} />
             <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} rows={3} /></FormControl><FormMessage /></FormItem>
+              <FormItem>
+                <FormLabel>Description (visible to students)</FormLabel>
+                <FormControl>
+                  <Textarea
+                    {...field}
+                    rows={3}
+                    disabled={isLoading}
+                    placeholder="e.g. Course code, professor, learning objectives, submission instructions…"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
             )} />
             <FormField control={form.control} name="dueDate" render={({ field }) => (
               <FormItem className="flex flex-col"><FormLabel>Due Date</FormLabel>
                 <Popover><PopoverTrigger asChild>
                   <FormControl>
-                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
+                    <Button variant="outline" disabled={isLoading} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {field.value ? format(field.value, "PPP") : "Pick a date"}
                     </Button>
@@ -99,15 +132,17 @@ const CreateAssignmentDialog = ({ onCreated, children }: Props) => {
             <FormField control={form.control} name="isGroup" render={({ field }) => (
               <FormItem className="flex items-center gap-3">
                 <FormLabel className="mt-0">Group Assignment</FormLabel>
-                <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={isLoading} /></FormControl>
               </FormItem>
             )} />
             {isGroup && (
               <FormField control={form.control} name="maxGroupSize" render={({ field }) => (
-                <FormItem><FormLabel>Max Group Size</FormLabel><FormControl><Input type="number" min={2} {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Max Group Size</FormLabel><FormControl><Input type="number" min={2} {...field} disabled={isLoading} /></FormControl><FormMessage /></FormItem>
               )} />
             )}
-            <Button type="submit" className="w-full">Create Assignment</Button>
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</> : "Create Assignment"}
+            </Button>
           </form>
         </Form>
       </DialogContent>

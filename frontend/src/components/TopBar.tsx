@@ -27,14 +27,14 @@ const TopBar = () => {
   const { isAuthenticated, user, logout } = useAuth();
 
   return (
-    <header className="sticky top-0 z-40 border-white/30 bg-white/40 backdrop-blur-md supports-[backdrop-filter]:bg-white/30">
+    <header className="sticky top-0 z-40 border-b border-border bg-white shadow-sm">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
-          <Link to="/" className="flex items-center gap-2 font-semibold">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-blue-100/60 to-purple-100/60 backdrop-blur-md">
-              <GraduationCap className="h-5 w-5 text-primary" />
+          <Link to="/" className="flex items-center gap-2 font-semibold text-foreground">
+            <div className="p-2 rounded-lg bg-muted">
+              <GraduationCap className="h-5 w-5 text-foreground" />
             </div>
-            <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-bold">EduTransparency</span>
+            <span className="font-bold text-foreground">EduTransparency</span>
           </Link>
           <div className="ml-2">
             <Breadcrumbs />
@@ -43,16 +43,16 @@ const TopBar = () => {
         {isAuthenticated && user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/50 transition-all duration-300">
+              <Button variant="ghost" size="icon" className="rounded-full hover:bg-muted transition-all duration-300">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src={user.picture ?? undefined} alt={user.name ?? "Profile"} />
-                  <AvatarFallback className="bg-gradient-to-br from-blue-100/60 to-purple-100/60 text-primary text-xs font-medium">
+                  <AvatarFallback className="bg-muted text-foreground text-xs font-medium">
                     {initials(user.name, user.email)}
                   </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 glass-card border-white/40">
+            <DropdownMenuContent align="end" className="w-56 bg-white border-border">
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col gap-0.5">
                   {user.name && (
@@ -67,7 +67,7 @@ const TopBar = () => {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => logout()} className="gap-2 focus:bg-blue-50/50">
+              <DropdownMenuItem onClick={() => logout()} className="gap-2 focus:bg-muted">
                 <LogOut className="h-4 w-4" />
                 Sign Out
               </DropdownMenuItem>

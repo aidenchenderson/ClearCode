@@ -73,7 +73,7 @@ export function GitHubUserSearch({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="border-0 p-0 shadow-none focus-visible:ring-0 h-auto min-h-[2rem] text-base flex-1"
+          className="border-0 p-0 pl-2 shadow-none focus-visible:ring-0 h-auto min-h-[2rem] text-base flex-1 min-w-0"
           disabled={disabled}
           autoFocus
         />
