@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import ClassroomDetail from "./pages/ClassroomDetail";
 import AssignmentDetail from "./pages/AssignmentDetail";
 import GroupDetail from "./pages/GroupDetail";
+import ProgressDemo from "./pages/ProgressDemo";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,6 +55,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <GroupDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/progress-demo"
+            element={
+              <ProtectedRoute>
+                <ProgressDemo />
               </ProtectedRoute>
             }
           />

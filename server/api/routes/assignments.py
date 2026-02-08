@@ -295,6 +295,39 @@ def get_assignment(assignment_id):
         return jsonify({"error": str(e)}), 500
 
 
+LINE_EVENTS_COLLECTION = "lineEvents"
+
+
+@bp.route("/<assignment_id>/progress", methods=["GET"])
+def get_progress_by_assignment_id(assignment_id):
+    """Fetch all lineEvents for the given assignment (stored in variable; returns empty JSON for now)."""
+    uid, err = _uid_from_request()
+    if err is not None:
+        return err[0], err[1]
+    db = get_firestore()
+    if not db:
+        return jsonify({"error": "Database not configured"}), 503
+    try:
+        docs = (
+            db.collection(LINE_EVENTS_COLLECTION)
+            .where("assignmentId", "==", assignment_id)
+            .stream()
+        )
+        line_events_data = [doc.to_dict() for doc in docs]
+
+        # get the groups
+
+        # form the sessions
+
+        # return output
+
+        print("line_events_data:", line_events_data)
+        return jsonify({}), 200
+    except Exception as e:
+        current_app.logger.exception(e)
+        return jsonify({"error": str(e)}), 500
+
+
 @bp.route("/<assignment_id>", methods=["PATCH"])
 def update_assignment(assignment_id):
     """Update an assignment (partial)."""
