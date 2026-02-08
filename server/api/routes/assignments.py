@@ -104,7 +104,8 @@ def get_assignments_by_github_id():
             data = doc.to_dict()
             assignments_list.append({
                 "id": data.get("assignmentId"),
-                "name": data.get("assignmentName")
+                "name": data.get("assignmentName"),
+                "description": data.get("assignmentDesc", ""),
             })
 
 
@@ -619,6 +620,7 @@ def get_invited_students(assignment_id):
                 "avatarUrl": d.get("avatarUrl"),
                 "name": d.get("name"),
                 "assignmentName": d.get("assignmentName", ""),
+                "assignmentDesc": d.get("assignmentDesc", ""),
                 "invitedAt": d.get("invitedAt", ""),
                 "status": d.get("status", "pending"),
             })
@@ -658,14 +660,17 @@ def invite_student(assignment_id):
         if list(existing_query):
             return jsonify({"error": "Student already invited"}), 409
         
-        # Get assignment name
-        assignment_name = assignment_ref.to_dict().get("name", "")
+        # Get assignment name and description
+        assignment_data = assignment_ref.to_dict()
+        assignment_name = assignment_data.get("name", "")
+        assignment_desc = assignment_data.get("description", "")
         
         # Create invite in assignmentInvites collection
         now = datetime.utcnow().isoformat() + "Z"
         add_result = db.collection(INVITES_COLLECTION).add({
             "assignmentId": assignment_id,
             "assignmentName": assignment_name,
+            "assignmentDesc": assignment_desc,
             "githubUsername": github_username,
             "avatarUrl": avatar_url,
             "name": name,
@@ -680,6 +685,7 @@ def invite_student(assignment_id):
             "id": doc_id,
             "assignmentId": assignment_id,
             "assignmentName": assignment_name or "",
+            "assignmentDesc": assignment_desc or "",
             "githubUsername": github_username,
             "avatarUrl": str(avatar_url) if avatar_url is not None else None,
             "name": str(name) if name is not None else None,
