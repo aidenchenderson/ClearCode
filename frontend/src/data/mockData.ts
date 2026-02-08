@@ -41,6 +41,12 @@ export interface SessionDetailEntry {
   aiUsed: boolean;
   /** For group work: which user made this change. */
   githubUsername?: string;
+  /** Line number in the file (1-based). */
+  lineNumber?: number | null;
+  /** File path (e.g. src/index.ts). */
+  filePath?: string | null;
+  /** Full line of code text; expand with + to see. */
+  lineContent?: string | null;
 }
 
 /** A coding session: date + time range, with expandable detail entries. */

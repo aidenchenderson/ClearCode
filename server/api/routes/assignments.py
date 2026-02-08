@@ -375,6 +375,9 @@ def _events_to_sessions(events, session_id_prefix="s"):
             "locChanged": 1,
             "aiUsed": None,
             "githubUsername": user or None,
+            "lineNumber": e.get("lineNumber"),
+            "filePath": e.get("filePath") or None,
+            "lineContent": e.get("lineContent") or None,
         }
         if not current_batch:
             current_batch.append((ts, e, detail))
@@ -497,13 +500,14 @@ def get_progress_by_assignment_id(assignment_id):
             if not repo_link and group_events:
                 first_event = min(group_events, key=lambda e: (e.get("updatedAt") or ""))
                 repo_link = first_event.get("githubLink")
-            sections.append({
-                "id": group_id,
-                "label": group_label,
-                "repoLink": repo_link,
-                "members": members,
-                "sessions": sessions,
-            })
+            if sessions:
+                sections.append({
+                    "id": group_id,
+                    "label": group_label,
+                    "repoLink": repo_link,
+                    "members": members,
+                    "sessions": sessions,
+                })
 
         if not sections:
             # No groups: single section with all events (e.g. solo or no groups defined)
