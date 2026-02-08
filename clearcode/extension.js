@@ -57,21 +57,22 @@ function getAutoIdentity(workspaceFolder) {
   if (remote) {
     const m = remote.match(/^git@github\.com:([^/]+)\/.+$/);
     if (m && m[1]) {
-      cachedIdentity = m[1];
+      // remove all spaces from cachedIdentity to avoid issues with firebase keys
+      cachedIdentity = m[1].replace(/\s+/g, "");
       return cachedIdentity;
     }
   }
 
   const ghUser = tryExec("gh api user -q .login", workspaceFolder);
   if (ghUser) {
-    cachedIdentity = ghUser;
+    cachedIdentity = ghUser.replace(/\s+/g, "");
     return cachedIdentity;
   }
 
   const name = tryExec("git config user.name", workspaceFolder);
   const email = tryExec("git config user.email", workspaceFolder);
 
-  cachedIdentity = name || email || "unknown-user";
+  cachedIdentity = (name || email || "unknown-user").replace(/\s+/g, "");
   return cachedIdentity;
 }
 
@@ -194,8 +195,8 @@ async function activate(context) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     output.appendLine(`data from flask: ${JSON.stringify(data)}`);
-  assignments = (data.assignments || []).map(a => a.name);
-  assignmentIDs = (data.assignments || []).map(a => a.id);
+    assignments = (data.assignments || []).map((a) => a.name);
+    assignmentIDs = (data.assignments || []).map((a) => a.id);
   } catch (err) {
     output.appendLine(`Failed to fetch assignments: ${err.message}`);
     assignments = [];
@@ -204,11 +205,7 @@ async function activate(context) {
   // data.assignments is your list
 
   const ASSIGNMENTS =
-    assignments.length > 0
-      ? assignments
-      : [
-          "No Assignments Found"
-        ];
+    assignments.length > 0 ? assignments : ["No Assignments Found"];
 
   // --- Assignments sidebar ---
   const assignmentsProvider = new AssignmentsProvider(
@@ -293,8 +290,6 @@ async function activate(context) {
         if (line0 < 0 || line0 >= doc.lineCount) continue;
         const text = doc.lineAt(line0).text;
 
-
-
         //push to firebase only if edited file is part of an assignment
         let assignmentWantedFiles = [];
         for (const name of assignments) {
@@ -303,28 +298,32 @@ async function activate(context) {
           assignmentWantedFiles.push({ name, file: WantedAssignmentFile });
         }
 
-        for (const a of assignmentWantedFiles){
-          if (a.file !== "not set" && a.file === path.basename(filePath)){
-            output.appendLine(`File ${a.file} is associated with assignment ${a.name}`);
+        for (const a of assignmentWantedFiles) {
+          if (a.file !== "not set" && a.file === path.basename(filePath)) {
+            output.appendLine(
+              `File ${a.file} is associated with assignment ${a.name}`,
+            );
             //push to flask
 
-            //asignmentIDs 
-              output.appendLine(
-                `${identity} | ${repoLink} | ${path.basename(filePath)} : Line ${line0 + 1} → ${text}`,
-              );
+            //asignmentIDs
+            output.appendLine(
+              `${identity} | ${repoLink} | ${path.basename(filePath)} : Line ${line0 + 1} → ${text}`,
+            );
 
-              const payload = {
-                AssignmentID: assignmentIDs[assignments.indexOf(a.name)],
-                GitHubName: identity,   // or assignments/assignmentIDs
-                GitHubLink: repoLink,
-                FilePath: path.basename(filePath),
-                LineNumber: line0 + 1,
-                LineContent: text,
-                updatedAt: new Date().toISOString()
-              };
-            output.appendLine("payload to send to flask: " + JSON.stringify(payload));
-            //flask send here 
-            
+            const payload = {
+              AssignmentID: assignmentIDs[assignments.indexOf(a.name)],
+              GitHubName: identity, // or assignments/assignmentIDs
+              GitHubLink: repoLink,
+              FilePath: path.basename(filePath),
+              LineNumber: line0 + 1,
+              LineContent: text,
+              updatedAt: new Date().toISOString(),
+            };
+            output.appendLine(
+              "payload to send to flask: " + JSON.stringify(payload),
+            );
+            //flask send here
+
             async function pushToFlask(payload, output) {
               try {
                 const res = await fetch(
@@ -333,7 +332,7 @@ async function activate(context) {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload),
-                  }
+                  },
                 );
 
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -344,17 +343,8 @@ async function activate(context) {
               }
             }
             pushToFlask(payload, output);
-
-
-
-
-
           }
         }
-
-
-
-
       }
     }
 
